@@ -968,12 +968,14 @@ function renderWidgets() {
     el.sideRight.classList.toggle("names-hidden", !state.widgets.showNames);
     const viewportWidth = Math.max(320, window.innerWidth || 0);
     const viewportHeight = Math.max(240, window.innerHeight || 0);
+    const isPhone = viewportWidth <= 1000;
     const isMobileLandscape = viewportWidth <= 1000 && viewportWidth > viewportHeight;
     const compactHeightScale = Math.max(0.45, Math.min(1, viewportHeight / 560));
     const compactWidthScale = Math.max(0.62, Math.min(1, viewportWidth / 1100));
     const compactScale = isMobileLandscape ? Math.min(compactHeightScale, compactWidthScale) : 1;
     const timerScale = Math.max(70, Math.min(160, state.widgets.timerScale)) / 100;
-    const effectiveTimerScale = timerScale * compactScale;
+    const phoneTimerMultiplier = isPhone ? 0.72 : 1;
+    const effectiveTimerScale = timerScale * compactScale * phoneTimerMultiplier;
     const timerWidth = Math.max(260, Math.min(Math.round(680 * effectiveTimerScale), Math.round(viewportWidth * (isMobileLandscape ? 0.86 : 0.94))));
     const timerHeight = Math.max(52, Math.min(Math.round(118 * effectiveTimerScale), Math.round(viewportHeight * (isMobileLandscape ? 0.18 : 0.24))));
     const timerFontSize = Math.max(26, Math.min(Math.round(84 * effectiveTimerScale), Math.round(viewportHeight * (isMobileLandscape ? 0.115 : 0.14))));
@@ -1009,9 +1011,11 @@ function renderWidgets() {
         ? Math.max(-18, Math.min(Math.round(viewportHeight * 0.12), state.widgets.menuY))
         : state.widgets.menuY;
     const landscapeMenuLift = isMobileLandscape ? -Math.max(16, Math.round(viewportHeight * 0.06)) : 0;
-    el.menuWrap.style.transform = `translateY(${safeMenuY + landscapeMenuLift}px)`;
+    const phoneMenuY = isPhone ? (safeMenuY + landscapeMenuLift) * 0.5 : safeMenuY + landscapeMenuLift;
+    el.menuWrap.style.transform = `translateY(${phoneMenuY}px)`;
     const menuScale = Math.max(70, Math.min(160, state.widgets.menuScale || 100)) / 100;
-    el.controlMenu.style.setProperty("--menu-scale", String(menuScale));
+    const effectiveMenuScale = isPhone ? menuScale * 0.5 : menuScale;
+    el.controlMenu.style.setProperty("--menu-scale", String(effectiveMenuScale));
     updateWidgetPreview();
     saveState();
 }
