@@ -978,6 +978,7 @@ legend {
 
     .menu-wrap {
         padding-top: 56px;
+        margin-top: -8px;
     }
 
     .side-left .quick-btn {
