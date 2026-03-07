@@ -953,28 +953,51 @@ legend {
 
 @media (max-width: 900px) and (orientation: landscape) {
     .side {
-        --name-offset: 24vh;
+        padding-top: 2vh;
+        --name-offset: 20vh;
     }
 
     .team-crest {
+        width: clamp(34px, 6.5vw, 54px);
+        height: clamp(34px, 6.5vw, 54px);
         top: calc(10% + var(--crest-y));
     }
 
     .player-name {
-        font-size: clamp(24px, 5vw, 44px);
+        font-size: clamp(14px, 3.2vw, 28px);
         width: 88%;
     }
 
     .big-score {
-        font-size: clamp(118px, 26vw, 250px);
+        font-size: clamp(78px, 18vw, 160px);
     }
 
     .timer-panel {
-        width: min(620px, 94vw);
+        width: min(560px, 86vw);
     }
 
     .menu-wrap {
-        padding-top: 72px;
+        padding-top: 56px;
+    }
+
+    .side-left .quick-btn {
+        left: 50px;
+    }
+
+    .side-right .quick-btn {
+        right: 50px;
+    }
+
+    .side-left .stop-btn {
+        left: 90px;
+    }
+
+    .side-right .stop-btn {
+        right: 90px;
+    }
+
+    .license-footer {
+        display: none;
     }
 }
 
