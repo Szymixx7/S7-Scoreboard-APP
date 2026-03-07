@@ -148,6 +148,7 @@ const el = {
     teamGoalsongVolume: document.getElementById("team-goalsong-volume"),
     teamGoalsongDuration: document.getElementById("team-goalsong-duration"),
     teamColorInput: document.getElementById("team-color-input"),
+    teamTextColorInput: document.getElementById("team-text-color-input"),
     teamThemeSelect: document.getElementById("team-theme-select"),
     teamSaveBtn: document.getElementById("team-save-btn"),
     teamClearEmblem: document.getElementById("team-clear-emblem"),
@@ -198,6 +199,8 @@ const settingInputs = {
     name2: document.getElementById("default-name-2"),
     color1: document.getElementById("default-color-1"),
     color2: document.getElementById("default-color-2"),
+    textColor1: document.getElementById("default-text-color-1"),
+    textColor2: document.getElementById("default-text-color-2"),
     theme1: document.getElementById("default-theme-1"),
     theme2: document.getElementById("default-theme-2"),
     goalsongTrack1: document.getElementById("default-goalsong-track-1"),
@@ -985,12 +988,20 @@ function renderWidgets() {
     const timerWidth = Math.max(260, Math.min(Math.round(680 * effectiveTimerScale), Math.round(viewportWidth * (isMobileLandscape ? 0.86 : 0.94))));
     const timerHeight = Math.max(52, Math.min(Math.round(118 * effectiveTimerScale), Math.round(viewportHeight * (isMobileLandscape ? 0.18 : 0.24))));
     const timerFontSize = Math.max(26, Math.min(Math.round(84 * effectiveTimerScale), Math.round(viewportHeight * (isMobileLandscape ? 0.115 : 0.14))));
+    const timerBtnSize = Math.max(20, Math.min(Math.round(timerHeight * 0.62), Math.round(viewportHeight * (isMobileLandscape ? 0.085 : 0.1))));
     const setWidth = Math.max(160, Math.min(Math.round(312 * effectiveTimerScale), Math.round(viewportWidth * (isMobileLandscape ? 0.46 : 0.64))));
     const setHeight = Math.max(48, Math.min(Math.round(136 * effectiveTimerScale), Math.round(viewportHeight * (isMobileLandscape ? 0.14 : 0.2))));
     el.timerDisplay.style.transform = "none";
     el.timerDisplay.style.fontSize = `${timerFontSize}px`;
+    el.timerToggle.style.fontSize = `${timerBtnSize}px`;
+    el.timerReset.style.fontSize = `${timerBtnSize}px`;
     el.timerPanel.style.height = `${timerHeight}px`;
     el.timerPanel.style.width = `${timerWidth}px`;
+    el.timerPanel.style.padding = isPhone
+        ? `${Math.max(4, Math.round(timerHeight * 0.08))}px ${Math.max(8, Math.round(timerWidth * 0.03))}px`
+        : "10px 24px";
+    el.timerPanel.style.gridTemplateColumns = isPhone ? "0.9fr 2.2fr 0.9fr" : "1fr 3fr 1fr";
+    el.timerPanel.style.gap = `${Math.max(4, Math.round(8 * compactScale))}px`;
     el.setPanel.style.height = `${setHeight}px`;
     el.setPanel.style.width = `${setWidth}px`;
     el.centerStack.style.gap = `${Math.max(6, Math.round(14 * compactScale))}px`;
@@ -1341,6 +1352,7 @@ function openTeamEditor(slot) {
     el.teamGoalsongVolume.value = String(team.goalsongVolume ?? 0.8);
     el.teamGoalsongDuration.value = String(team.goalsongDuration ?? -1);
     el.teamColorInput.value = normalizeHex(team.color);
+    el.teamTextColorInput.value = normalizeHex(team.textColor || "#ffffff");
     el.teamThemeSelect.value = team.themeId || "";
     openModal(el.teamEditorModal);
 }
@@ -1389,7 +1401,7 @@ function saveTeamEditor() {
     } else {
         team.themeId = "";
         team.color = normalizeHex(el.teamColorInput.value);
-        team.textColor = "#ffffff";
+        team.textColor = normalizeHex(el.teamTextColorInput.value);
     }
     syncSettingsTeamInputs();
     renderAll();
@@ -1401,6 +1413,8 @@ function syncSettingsTeamInputs() {
     settingInputs.name2.value = state.teams[1].name;
     settingInputs.color1.value = normalizeHex(state.teams[0].color);
     settingInputs.color2.value = normalizeHex(state.teams[1].color);
+    settingInputs.textColor1.value = normalizeHex(state.teams[0].textColor || "#ffffff");
+    settingInputs.textColor2.value = normalizeHex(state.teams[1].textColor || "#ffffff");
     settingInputs.theme1.value = state.teams[0].themeId || "";
     settingInputs.theme2.value = state.teams[1].themeId || "";
     settingInputs.goalsongTrack1.value = state.teams[0].goalsongTrack || "";
@@ -1825,6 +1839,7 @@ function updateTeamFromSettings(teamIndex) {
     const team = state.teams[teamIndex];
     const nameInput = teamIndex === 0 ? settingInputs.name1 : settingInputs.name2;
     const colorInput = teamIndex === 0 ? settingInputs.color1 : settingInputs.color2;
+    const textColorInput = teamIndex === 0 ? settingInputs.textColor1 : settingInputs.textColor2;
     const themeInput = teamIndex === 0 ? settingInputs.theme1 : settingInputs.theme2;
     const goalsongTrackInput = teamIndex === 0 ? settingInputs.goalsongTrack1 : settingInputs.goalsongTrack2;
     const goalsongVolumeInput = teamIndex === 0 ? settingInputs.goalsongVolume1 : settingInputs.goalsongVolume2;
@@ -1836,7 +1851,7 @@ function updateTeamFromSettings(teamIndex) {
     } else {
         team.themeId = "";
         team.color = normalizeHex(colorInput.value);
-        team.textColor = "#ffffff";
+        team.textColor = normalizeHex(textColorInput.value);
     }
     team.goalsongTrack = goalsongTrackInput.value || "";
     team.goalsongVolume = Number(goalsongVolumeInput.value);
@@ -1929,6 +1944,8 @@ function bindSettingsInputs() {
     settingInputs.name2.addEventListener("input", () => updateTeamFromSettings(1));
     settingInputs.color1.addEventListener("input", () => updateTeamFromSettings(0));
     settingInputs.color2.addEventListener("input", () => updateTeamFromSettings(1));
+    settingInputs.textColor1.addEventListener("input", () => updateTeamFromSettings(0));
+    settingInputs.textColor2.addEventListener("input", () => updateTeamFromSettings(1));
     settingInputs.theme1.addEventListener("change", () => updateTeamFromSettings(0));
     settingInputs.theme2.addEventListener("change", () => updateTeamFromSettings(1));
 
@@ -2029,6 +2046,7 @@ function bindSettingsInputs() {
             return;
         }
         el.teamColorInput.value = normalizeHex(theme.color);
+        el.teamTextColorInput.value = normalizeHex(theme.textColor || "#ffffff");
     });
 
     el.teamSaveBtn.addEventListener("click", saveTeamEditor);
