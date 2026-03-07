@@ -60,6 +60,9 @@ const state = {
     voiceRecognition: null,
     voiceRecognitionRestartTimer: null,
     voiceRecognitionEnabled: false,
+    voiceRecognitionActive: false,
+    voiceRecognitionStarting: false,
+    voiceMicStream: null,
     voiceLastCommandAt: 0,
     voiceLastCommandKey: "",
     goalsongFiles: [],
@@ -678,40 +681,45 @@ function normalizeSpeechText(text) {
         .trim();
 }
 
-function applyVoiceGoalCommand(transcript) {
+function getVoiceGoalSlot(transcript) {
     const text = normalizeSpeechText(transcript);
-    const hasGoalWord = /\b(go+l|goal|bramk\w*|punkt\w*)\b/.test(text);
+    const hasGoalWord = /\b(go+l|goal)\b/.test(text);
     if (!hasGoalWord) {
-        return false;
+        return null;
     }
     const homeMatch = /\b(gospodar\w*|lew\w*|left|home)\b/.test(text);
     const awayMatch = /\b(gosc\w*|praw\w*|right|away)\b/.test(text);
+    if (homeMatch === awayMatch) {
+        return null;
+    }
+    return homeMatch ? "left" : "right";
+}
+
+function applyVoiceGoalCommand(transcript, confidence, isFinal) {
+    if (!isFinal) {
+        return false;
+    }
+    if (Number.isFinite(confidence) && confidence > 0 && confidence < 0.55) {
+        return false;
+    }
+    const slot = getVoiceGoalSlot(transcript);
+    if (!slot) {
+        return false;
+    }
     const now = Date.now();
-    if (homeMatch && !awayMatch) {
-        const key = "left";
-        if (state.voiceLastCommandKey === key && now - state.voiceLastCommandAt < 900) {
-            return false;
-        }
-        state.voiceLastCommandKey = key;
-        state.voiceLastCommandAt = now;
-        changeScore("left", 1);
-        return true;
+    if (state.voiceLastCommandKey === slot && now - state.voiceLastCommandAt < 1200) {
+        return false;
     }
-    if (awayMatch && !homeMatch) {
-        const key = "right";
-        if (state.voiceLastCommandKey === key && now - state.voiceLastCommandAt < 900) {
-            return false;
-        }
-        state.voiceLastCommandKey = key;
-        state.voiceLastCommandAt = now;
-        changeScore("right", 1);
-        return true;
-    }
-    return false;
+    state.voiceLastCommandKey = slot;
+    state.voiceLastCommandAt = now;
+    changeScore(slot, 1, { playGoalSong: false });
+    return true;
 }
 
 function stopVoiceGoalRecognition() {
     state.voiceRecognitionEnabled = false;
+    state.voiceRecognitionActive = false;
+    state.voiceRecognitionStarting = false;
     state.voiceLastCommandAt = 0;
     state.voiceLastCommandKey = "";
     if (state.voiceRecognitionRestartTimer) {
@@ -723,6 +731,10 @@ function stopVoiceGoalRecognition() {
             state.voiceRecognition.stop();
         } catch (_) {}
     }
+    if (state.voiceMicStream) {
+        state.voiceMicStream.getTracks().forEach((track) => track.stop());
+        state.voiceMicStream = null;
+    }
 }
 
 function isVoiceRecognitionSupported() {
@@ -733,12 +745,28 @@ function requestMicrophonePermission() {
     if (!navigator.mediaDevices?.getUserMedia) {
         return Promise.resolve(false);
     }
+    if (state.voiceMicStream) {
+        return Promise.resolve(true);
+    }
     return navigator.mediaDevices.getUserMedia({ audio: true })
         .then((stream) => {
-            stream.getTracks().forEach((track) => track.stop());
+            state.voiceMicStream = stream;
             return true;
         })
         .catch(() => false);
+}
+
+function scheduleVoiceRecognitionRestart(delayMs) {
+    if (!state.voiceRecognitionEnabled) {
+        return;
+    }
+    if (state.voiceRecognitionRestartTimer) {
+        return;
+    }
+    state.voiceRecognitionRestartTimer = window.setTimeout(() => {
+        state.voiceRecognitionRestartTimer = null;
+        startVoiceGoalRecognition();
+    }, delayMs);
 }
 
 function startVoiceGoalRecognition() {
@@ -753,6 +781,9 @@ function startVoiceGoalRecognition() {
         window.clearTimeout(state.voiceRecognitionRestartTimer);
         state.voiceRecognitionRestartTimer = null;
     }
+    if (state.voiceRecognitionStarting || state.voiceRecognitionActive) {
+        return true;
+    }
     state.voiceRecognitionEnabled = true;
     if (!state.voiceRecognition) {
         const recognition = new SpeechRecognitionCtor();
@@ -760,25 +791,32 @@ function startVoiceGoalRecognition() {
         recognition.continuous = true;
         recognition.interimResults = true;
         recognition.maxAlternatives = 3;
+        recognition.onstart = () => {
+            state.voiceRecognitionStarting = false;
+            state.voiceRecognitionActive = true;
+        };
         recognition.onresult = (event) => {
             for (let i = event.resultIndex; i < event.results.length; i += 1) {
                 const result = event.results[i];
                 for (let j = 0; j < result.length; j += 1) {
-                    if (applyVoiceGoalCommand(result[j]?.transcript || "")) {
+                    const alt = result[j];
+                    if (applyVoiceGoalCommand(alt?.transcript || "", alt?.confidence, result.isFinal)) {
                         return;
                     }
                 }
             }
         };
         recognition.onend = () => {
+            state.voiceRecognitionActive = false;
+            state.voiceRecognitionStarting = false;
             if (!state.voiceRecognitionEnabled) {
                 return;
             }
-            state.voiceRecognitionRestartTimer = window.setTimeout(() => {
-                startVoiceGoalRecognition();
-            }, 220);
+            scheduleVoiceRecognitionRestart(120);
         };
         recognition.onerror = (event) => {
+            state.voiceRecognitionActive = false;
+            state.voiceRecognitionStarting = false;
             if (event?.error === "not-allowed" || event?.error === "service-not-allowed") {
                 state.settings.voiceGoalCommandsEnabled = false;
                 settingInputs.voiceGoalEnabled.checked = false;
@@ -790,16 +828,16 @@ function startVoiceGoalRecognition() {
             if (!state.voiceRecognitionEnabled) {
                 return;
             }
-            state.voiceRecognitionRestartTimer = window.setTimeout(() => {
-                startVoiceGoalRecognition();
-            }, 450);
+            scheduleVoiceRecognitionRestart(220);
         };
         state.voiceRecognition = recognition;
     }
     try {
+        state.voiceRecognitionStarting = true;
         state.voiceRecognition.start();
         return true;
     } catch (_) {
+        state.voiceRecognitionStarting = false;
         return false;
     }
 }
@@ -906,19 +944,44 @@ function renderWidgets() {
     el.nameRight.classList.toggle("is-hidden", !state.widgets.showNames);
     el.sideLeft.classList.toggle("names-hidden", !state.widgets.showNames);
     el.sideRight.classList.toggle("names-hidden", !state.widgets.showNames);
+    const viewportWidth = Math.max(320, window.innerWidth || 0);
+    const viewportHeight = Math.max(240, window.innerHeight || 0);
+    const isMobileLandscape = viewportWidth <= 1000 && viewportWidth > viewportHeight;
+    const compactHeightScale = Math.max(0.58, Math.min(1, viewportHeight / 430));
+    const compactWidthScale = Math.max(0.72, Math.min(1, viewportWidth / 920));
+    const compactScale = isMobileLandscape ? Math.min(compactHeightScale, compactWidthScale) : 1;
     const timerScale = Math.max(70, Math.min(160, state.widgets.timerScale)) / 100;
+    const effectiveTimerScale = timerScale * compactScale;
+    const timerWidth = Math.max(300, Math.min(Math.round(680 * effectiveTimerScale), Math.round(viewportWidth * 0.94)));
+    const timerHeight = Math.max(62, Math.min(Math.round(118 * effectiveTimerScale), Math.round(viewportHeight * 0.24)));
+    const timerFontSize = Math.max(30, Math.min(Math.round(84 * effectiveTimerScale), Math.round(viewportHeight * 0.14)));
+    const setWidth = Math.max(180, Math.min(Math.round(312 * effectiveTimerScale), Math.round(viewportWidth * 0.64)));
+    const setHeight = Math.max(58, Math.min(Math.round(136 * effectiveTimerScale), Math.round(viewportHeight * 0.2)));
     el.timerDisplay.style.transform = "none";
-    el.timerDisplay.style.fontSize = `${Math.round(84 * timerScale)}px`;
-    el.timerPanel.style.height = `${Math.round(118 * timerScale)}px`;
-    el.timerPanel.style.width = `${Math.round(680 * timerScale)}px`;
-    el.setPanel.style.height = `${Math.round(136 * timerScale)}px`;
-    el.setPanel.style.width = `${Math.round(312 * timerScale)}px`;
+    el.timerDisplay.style.fontSize = `${timerFontSize}px`;
+    el.timerPanel.style.height = `${timerHeight}px`;
+    el.timerPanel.style.width = `${timerWidth}px`;
+    el.setPanel.style.height = `${setHeight}px`;
+    el.setPanel.style.width = `${setWidth}px`;
+    el.centerStack.style.gap = `${Math.max(6, Math.round(14 * compactScale))}px`;
+    el.menuWrap.style.paddingTop = `${Math.max(52, Math.round(88 * compactScale))}px`;
+    el.menuToggle.style.width = `${Math.max(78, Math.round(110 * compactScale))}px`;
+    el.menuToggle.style.height = `${Math.max(52, Math.round(80 * compactScale))}px`;
+    el.menuToggle.style.fontSize = `${Math.max(34, Math.round(58 * compactScale))}px`;
+    el.controlMenu.style.width = `${Math.max(260, Math.min(Math.round(480 * compactScale), Math.round(viewportWidth * 0.92)))}px`;
+    el.controlMenu.style.height = `${Math.max(132, Math.min(Math.round(272 * compactScale), Math.round(viewportHeight * 0.46)))}px`;
+    el.controlMenu.style.padding = `${Math.max(8, Math.round(18 * compactScale))}px`;
+    el.controlMenu.style.gap = `${Math.max(6, Math.round(10 * compactScale))}px`;
+    el.controlMenu.querySelectorAll(".menu-btn").forEach((btn) => {
+        btn.style.fontSize = `${Math.max(26, Math.round(52 * compactScale))}px`;
+    });
     if (state.widgets.orientationVertical) {
         el.centerStack.style.transform = `translate(-50%, -50%) translateY(${state.widgets.centerY}px)`;
     } else {
         el.centerStack.style.transform = `translateX(-50%) translateY(${state.widgets.centerY}px)`;
     }
-    el.menuWrap.style.transform = `translateY(${state.widgets.menuY}px)`;
+    const safeMenuY = isMobileLandscape ? Math.min(state.widgets.menuY, 120) : state.widgets.menuY;
+    el.menuWrap.style.transform = `translateY(${safeMenuY}px)`;
     const menuScale = Math.max(70, Math.min(160, state.widgets.menuScale || 100)) / 100;
     el.controlMenu.style.setProperty("--menu-scale", String(menuScale));
     updateWidgetPreview();
@@ -1004,7 +1067,7 @@ function openSidePopover(anchorButton, slot) {
     el.sidePopover.classList.remove("is-hidden");
 }
 
-function changeScore(slot, delta) {
+function changeScore(slot, delta, options = {}) {
     const team = getTeamAt(slot);
     pushHistory();
     team.score = Math.max(0, team.score + delta);
@@ -1014,7 +1077,8 @@ function changeScore(slot, delta) {
     renderScores();
     updateWidgetPreview();
     speakScore();
-    if (delta > 0) {
+    const shouldPlayGoalSong = options.playGoalSong !== false;
+    if (delta > 0 && shouldPlayGoalSong) {
         playGoalSong(slot);
     }
 }
