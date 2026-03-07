@@ -87,6 +87,7 @@ const state = {
     settings: {
         swipeScore: true,
         swipeDownMinus: true,
+        swipeArea: "score",
         setsEnabled: false,
         pointsToSet: 25,
         setAdvantage: 2,
@@ -183,6 +184,7 @@ const widgetInputs = {
 const settingInputs = {
     swipe: document.getElementById("swipe-score"),
     swipeDownMinus: document.getElementById("swipe-down-minus"),
+    swipeArea: document.getElementById("swipe-area"),
     askSetAward: document.getElementById("ask-set-award"),
     voiceGoalEnabled: document.getElementById("voice-goal-enabled"),
     setsEnabled: document.getElementById("sets-enabled"),
@@ -343,6 +345,7 @@ function resetAllState() {
         state.settings = {
             swipeScore: true,
             swipeDownMinus: true,
+            swipeArea: "score",
             setsEnabled: false,
             pointsToSet: 25,
             setAdvantage: 2,
@@ -1251,15 +1254,17 @@ function bindScoreGestures(scoreElement, slot) {
     });
 
     let startY = null;
+    let swipeTriggered = false;
     scoreElement.addEventListener("touchstart", (event) => {
-        if (!state.settings.swipeScore) {
+        if (!state.settings.swipeScore || state.settings.swipeArea === "side") {
             return;
         }
         startY = event.touches[0].clientY;
+        swipeTriggered = false;
     }, { passive: true });
 
     scoreElement.addEventListener("touchmove", (event) => {
-        if (!state.settings.swipeScore || startY === null) {
+        if (!state.settings.swipeScore || state.settings.swipeArea === "side" || startY === null || swipeTriggered) {
             return;
         }
         const nowY = event.touches[0].clientY;
@@ -1267,13 +1272,60 @@ function bindScoreGestures(scoreElement, slot) {
         const direction = state.settings.swipeDownMinus ? (diff > 0 ? 1 : -1) : (diff > 0 ? -1 : 1);
         if (Math.abs(diff) >= 24) {
             changeScore(slot, direction);
-            startY = nowY;
+            swipeTriggered = true;
         }
     }, { passive: true });
 
     scoreElement.addEventListener("touchend", () => {
         startY = null;
+        swipeTriggered = false;
     });
+
+    scoreElement.addEventListener("touchcancel", () => {
+        startY = null;
+        swipeTriggered = false;
+    });
+}
+
+function bindSideSwipeGestures(sideElement, slot) {
+    let startY = null;
+    let swipeTriggered = false;
+    let validStart = false;
+
+    sideElement.addEventListener("touchstart", (event) => {
+        if (!state.settings.swipeScore || state.settings.swipeArea !== "side") {
+            return;
+        }
+        if (event.target.closest("button, input, select, .menu-popover, .side-popover")) {
+            validStart = false;
+            return;
+        }
+        startY = event.touches[0].clientY;
+        swipeTriggered = false;
+        validStart = true;
+    }, { passive: true });
+
+    sideElement.addEventListener("touchmove", (event) => {
+        if (!state.settings.swipeScore || state.settings.swipeArea !== "side" || !validStart || startY === null || swipeTriggered) {
+            return;
+        }
+        const nowY = event.touches[0].clientY;
+        const diff = startY - nowY;
+        const direction = state.settings.swipeDownMinus ? (diff > 0 ? 1 : -1) : (diff > 0 ? -1 : 1);
+        if (Math.abs(diff) >= 24) {
+            changeScore(slot, direction);
+            swipeTriggered = true;
+        }
+    }, { passive: true });
+
+    const stop = () => {
+        startY = null;
+        swipeTriggered = false;
+        validStart = false;
+    };
+
+    sideElement.addEventListener("touchend", stop);
+    sideElement.addEventListener("touchcancel", stop);
 }
 
 function openTeamEditor(slot) {
@@ -1792,6 +1844,10 @@ function bindSettingsInputs() {
         state.settings.swipeDownMinus = settingInputs.swipeDownMinus.checked;
         saveState();
     });
+    settingInputs.swipeArea.addEventListener("change", () => {
+        state.settings.swipeArea = settingInputs.swipeArea.value === "side" ? "side" : "score";
+        saveState();
+    });
     settingInputs.askSetAward.addEventListener("change", () => {
         state.settings.askSetAward = settingInputs.askSetAward.checked;
         saveState();
@@ -2063,6 +2119,7 @@ function initializeDefaults() {
     loadState();
     state.settings.countdownFormat = state.settings.countdownFormat === "ms" ? "ms" : "hms";
     state.settings.voiceGoalCommandsEnabled = Boolean(state.settings.voiceGoalCommandsEnabled);
+    state.settings.swipeArea = state.settings.swipeArea === "side" ? "side" : "score";
     state.widgets = {
         orientationVertical: false,
         darkMode: false,
@@ -2096,6 +2153,7 @@ function initializeDefaults() {
     widgetInputs.menuSize.value = String(state.widgets.menuScale);
     settingInputs.swipeDownMinus.checked = state.settings.swipeDownMinus;
     settingInputs.swipe.checked = state.settings.swipeScore;
+    settingInputs.swipeArea.value = state.settings.swipeArea;
     settingInputs.askSetAward.checked = state.settings.askSetAward;
     settingInputs.voiceGoalEnabled.checked = state.settings.voiceGoalCommandsEnabled;
     settingInputs.setsEnabled.checked = state.settings.setsEnabled;
@@ -2127,6 +2185,8 @@ function init() {
     bindTimeEditorDrag();
     bindScoreGestures(el.scoreLeft, "left");
     bindScoreGestures(el.scoreRight, "right");
+    bindSideSwipeGestures(el.sideLeft, "left");
+    bindSideSwipeGestures(el.sideRight, "right");
     bindSetGestures(el.setsLeft, "left");
     bindSetGestures(el.setsRight, "right");
     bindMainActions();
