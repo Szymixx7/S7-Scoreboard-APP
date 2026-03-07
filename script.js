@@ -1538,6 +1538,14 @@ function bindMainActions() {
             swapSides();
             return;
         }
+        if (action === "fullscreen") {
+            if (document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            } else {
+                document.documentElement.requestFullscreen?.().catch(() => {});
+            }
+            return;
+        }
         if (action === "widgets") {
             openModal(el.widgetsModal);
             return;
