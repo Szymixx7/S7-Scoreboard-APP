@@ -257,6 +257,14 @@ select {
     gap: 10px;
 }
 
+.time-editor.is-ms-format {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.time-editor.is-ms-format .time-col[data-unit="hours"] {
+    display: none;
+}
+
 .time-col {
     text-align: center;
 }
@@ -458,7 +466,8 @@ select {
     display: grid;
     gap: 10px;
     max-height: 66vh;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     padding: 4px 6px 8px;
 }
 
@@ -466,6 +475,21 @@ select {
     font-size: 20px;
     display: grid;
     gap: 4px;
+    min-width: 0;
+}
+
+.modal-body input,
+.modal-body select {
+    width: 100%;
+    min-width: 0;
+}
+
+.inline-goalsong .goalsong-inline-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    width: 100%;
 }
 
 .reset-all-btn {
@@ -953,4 +977,32 @@ legend {
     .timer-display {
         font-size: clamp(30px, 7vw, 52px);
     }
+}
+
+.inline-goalsong {
+    display: grid !important;
+    gap: 6px;
+}
+
+.goalsong-inline-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.goalsong-preview-btn {
+    border: 0;
+    border-radius: 10px;
+    width: 44px;
+    height: 40px;
+    background: rgb(255 255 255 / 62%);
+    color: var(--ink);
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.goalsong-preview-btn.is-playing {
+    background: #ff3b35;
+    color: #fff;
 }
