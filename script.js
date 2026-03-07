@@ -812,11 +812,9 @@ function startVoiceGoalRecognition() {
             if (!state.voiceRecognitionEnabled) {
                 return;
             }
-            scheduleVoiceRecognitionRestart(120);
+            scheduleVoiceRecognitionRestart(260);
         };
         recognition.onerror = (event) => {
-            state.voiceRecognitionActive = false;
-            state.voiceRecognitionStarting = false;
             if (event?.error === "not-allowed" || event?.error === "service-not-allowed") {
                 state.settings.voiceGoalCommandsEnabled = false;
                 settingInputs.voiceGoalEnabled.checked = false;
@@ -828,7 +826,14 @@ function startVoiceGoalRecognition() {
             if (!state.voiceRecognitionEnabled) {
                 return;
             }
-            scheduleVoiceRecognitionRestart(220);
+            // Let onend handle restart to avoid rapid start/stop loops on mobile.
+            if (event?.error === "audio-capture") {
+                state.settings.voiceGoalCommandsEnabled = false;
+                settingInputs.voiceGoalEnabled.checked = false;
+                stopVoiceGoalRecognition();
+                saveState();
+                window.alert("Nie wykryto aktywnego mikrofonu.");
+            }
         };
         state.voiceRecognition = recognition;
     }
@@ -947,16 +952,16 @@ function renderWidgets() {
     const viewportWidth = Math.max(320, window.innerWidth || 0);
     const viewportHeight = Math.max(240, window.innerHeight || 0);
     const isMobileLandscape = viewportWidth <= 1000 && viewportWidth > viewportHeight;
-    const compactHeightScale = Math.max(0.58, Math.min(1, viewportHeight / 430));
-    const compactWidthScale = Math.max(0.72, Math.min(1, viewportWidth / 920));
+    const compactHeightScale = Math.max(0.45, Math.min(1, viewportHeight / 560));
+    const compactWidthScale = Math.max(0.62, Math.min(1, viewportWidth / 1100));
     const compactScale = isMobileLandscape ? Math.min(compactHeightScale, compactWidthScale) : 1;
     const timerScale = Math.max(70, Math.min(160, state.widgets.timerScale)) / 100;
     const effectiveTimerScale = timerScale * compactScale;
-    const timerWidth = Math.max(300, Math.min(Math.round(680 * effectiveTimerScale), Math.round(viewportWidth * 0.94)));
-    const timerHeight = Math.max(62, Math.min(Math.round(118 * effectiveTimerScale), Math.round(viewportHeight * 0.24)));
-    const timerFontSize = Math.max(30, Math.min(Math.round(84 * effectiveTimerScale), Math.round(viewportHeight * 0.14)));
-    const setWidth = Math.max(180, Math.min(Math.round(312 * effectiveTimerScale), Math.round(viewportWidth * 0.64)));
-    const setHeight = Math.max(58, Math.min(Math.round(136 * effectiveTimerScale), Math.round(viewportHeight * 0.2)));
+    const timerWidth = Math.max(260, Math.min(Math.round(680 * effectiveTimerScale), Math.round(viewportWidth * (isMobileLandscape ? 0.86 : 0.94))));
+    const timerHeight = Math.max(52, Math.min(Math.round(118 * effectiveTimerScale), Math.round(viewportHeight * (isMobileLandscape ? 0.18 : 0.24))));
+    const timerFontSize = Math.max(26, Math.min(Math.round(84 * effectiveTimerScale), Math.round(viewportHeight * (isMobileLandscape ? 0.115 : 0.14))));
+    const setWidth = Math.max(160, Math.min(Math.round(312 * effectiveTimerScale), Math.round(viewportWidth * (isMobileLandscape ? 0.46 : 0.64))));
+    const setHeight = Math.max(48, Math.min(Math.round(136 * effectiveTimerScale), Math.round(viewportHeight * (isMobileLandscape ? 0.14 : 0.2))));
     el.timerDisplay.style.transform = "none";
     el.timerDisplay.style.fontSize = `${timerFontSize}px`;
     el.timerPanel.style.height = `${timerHeight}px`;
@@ -968,19 +973,24 @@ function renderWidgets() {
     el.menuToggle.style.width = `${Math.max(78, Math.round(110 * compactScale))}px`;
     el.menuToggle.style.height = `${Math.max(52, Math.round(80 * compactScale))}px`;
     el.menuToggle.style.fontSize = `${Math.max(34, Math.round(58 * compactScale))}px`;
-    el.controlMenu.style.width = `${Math.max(260, Math.min(Math.round(480 * compactScale), Math.round(viewportWidth * 0.92)))}px`;
-    el.controlMenu.style.height = `${Math.max(132, Math.min(Math.round(272 * compactScale), Math.round(viewportHeight * 0.46)))}px`;
+    el.controlMenu.style.width = `${Math.max(220, Math.min(Math.round(480 * compactScale), Math.round(viewportWidth * (isMobileLandscape ? 0.8 : 0.92))))}px`;
+    el.controlMenu.style.height = `${Math.max(110, Math.min(Math.round(272 * compactScale), Math.round(viewportHeight * (isMobileLandscape ? 0.34 : 0.46))))}px`;
     el.controlMenu.style.padding = `${Math.max(8, Math.round(18 * compactScale))}px`;
     el.controlMenu.style.gap = `${Math.max(6, Math.round(10 * compactScale))}px`;
     el.controlMenu.querySelectorAll(".menu-btn").forEach((btn) => {
         btn.style.fontSize = `${Math.max(26, Math.round(52 * compactScale))}px`;
     });
+    const safeCenterY = isMobileLandscape
+        ? Math.max(-36, Math.min(42, state.widgets.centerY))
+        : state.widgets.centerY;
     if (state.widgets.orientationVertical) {
-        el.centerStack.style.transform = `translate(-50%, -50%) translateY(${state.widgets.centerY}px)`;
+        el.centerStack.style.transform = `translate(-50%, -50%) translateY(${safeCenterY}px)`;
     } else {
-        el.centerStack.style.transform = `translateX(-50%) translateY(${state.widgets.centerY}px)`;
+        el.centerStack.style.transform = `translateX(-50%) translateY(${safeCenterY}px)`;
     }
-    const safeMenuY = isMobileLandscape ? Math.min(state.widgets.menuY, 120) : state.widgets.menuY;
+    const safeMenuY = isMobileLandscape
+        ? Math.max(-18, Math.min(Math.round(viewportHeight * 0.12), state.widgets.menuY))
+        : state.widgets.menuY;
     el.menuWrap.style.transform = `translateY(${safeMenuY}px)`;
     const menuScale = Math.max(70, Math.min(160, state.widgets.menuScale || 100)) / 100;
     el.controlMenu.style.setProperty("--menu-scale", String(menuScale));
