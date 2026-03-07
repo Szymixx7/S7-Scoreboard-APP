@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="favicon-scoreboardoverlay.png" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <title>S7 Scoreboard Overlay</title>
+</head>
+<body>
+    <main id="overlay" class="overlay">
+        <section id="side-left" class="side side-left" data-slot="left">
+            <button class="edit-btn" data-team-slot="left" aria-label="Edit player 1">&#9998;</button>
+            <button class="quick-btn" data-quick-slot="left" aria-label="Quick score actions">+!</button>
+            <button class="stop-btn" data-stop-slot="left" aria-label="Stop goalsong">&#9209;</button>
+            <div id="fire-left" class="side-fireworks is-hidden"></div>
+            <div id="crown-left" class="crown-badge is-hidden">&#128081;</div>
+            <img id="crest-left" class="team-crest is-hidden" alt="">
+            <h1 id="name-left" class="player-name">Player 1</h1>
+            <p id="score-left" class="big-score">0</p>
+        </section>
+
+        <section id="side-right" class="side side-right" data-slot="right">
+            <button class="edit-btn" data-team-slot="right" aria-label="Edit player 2">&#9998;</button>
+            <button class="quick-btn" data-quick-slot="right" aria-label="Quick score actions">+!</button>
+            <button class="stop-btn" data-stop-slot="right" aria-label="Stop goalsong">&#9209;</button>
+            <div id="fire-right" class="side-fireworks is-hidden"></div>
+            <div id="crown-right" class="crown-badge is-hidden">&#128081;</div>
+            <img id="crest-right" class="team-crest is-hidden" alt="">
+            <h1 id="name-right" class="player-name">Player 2</h1>
+            <p id="score-right" class="big-score">0</p>
+        </section>
+
+        <div class="center-stack">
+            <div class="panel timer-panel">
+                <button id="timer-toggle" class="timer-btn" aria-label="Pauza lub start">&#9654;</button>
+                <button id="timer-display" class="timer-display" aria-label="Edytuj czas">00:00:00</button>
+                <button id="timer-reset" class="timer-btn" aria-label="Reset czasu">&#8635;</button>
+            </div>
+
+            <section id="time-editor" class="panel time-editor is-hidden" aria-label="Edycja czasu">
+                <div class="time-col" data-unit="hours">
+                    <button class="time-step" data-dir="up">&#9650;</button>
+                    <button class="time-value" data-unit="hours">00</button>
+                    <button class="time-step" data-dir="down">&#9660;</button>
+                    <span class="time-label">H</span>
+                </div>
+                <div class="time-col" data-unit="minutes">
+                    <button class="time-step" data-dir="up">&#9650;</button>
+                    <button class="time-value" data-unit="minutes">00</button>
+                    <button class="time-step" data-dir="down">&#9660;</button>
+                    <span class="time-label">M</span>
+                </div>
+                <div class="time-col" data-unit="seconds">
+                    <button class="time-step" data-dir="up">&#9650;</button>
+                    <button class="time-value" data-unit="seconds">00</button>
+                    <button class="time-step" data-dir="down">&#9660;</button>
+                    <span class="time-label">S</span>
+                </div>
+            </section>
+
+            <div id="set-panel" class="panel set-score">
+                <span id="sets-left" class="set-blue">0</span>
+                <span id="sets-right" class="set-red">0</span>
+            </div>
+
+            <div class="menu-wrap">
+                <button id="menu-toggle" class="panel menu-toggle" aria-label="Expand menu">&#8996;</button>
+                <div id="control-menu" class="panel control-menu">
+                    <button class="menu-btn" data-action="reset-match" aria-label="Reset match">&#8635;</button>
+                    <button class="menu-btn" data-action="undo-redo" aria-label="Undo or redo">&#8630;</button>
+                    <button class="menu-btn" data-action="swap-sides" aria-label="Swap sides">&#8596;</button>
+                    <button class="menu-btn" data-action="placeholder-top" aria-label="Placeholder top">&#8993;</button>
+                    <button class="menu-btn" data-action="placeholder-bottom-1" aria-label="Placeholder bottom 1">&#9638;</button>
+                    <button class="menu-btn" data-action="placeholder-bottom-2" aria-label="Placeholder bottom 2">&#8618;</button>
+                    <button class="menu-btn" data-action="widgets" aria-label="Widgets">&#9733;</button>
+                    <button class="menu-btn" data-action="settings" aria-label="Settings">&#9881;</button>
+                </div>
+                <div id="menu-popover" class="panel menu-popover is-hidden"></div>
+            </div>
+        </div>
+    </main>
+
+    <div id="modal-backdrop" class="modal-backdrop is-hidden"></div>
+
+    <div id="side-popover" class="panel side-popover is-hidden"></div>
+
+    <section id="team-editor-modal" class="panel modal team-modal is-hidden">
+        <header class="modal-head">
+            <h2 id="team-editor-title">Edycja dru&#380;yny</h2>
+            <button class="close-modal" data-close="team-editor-modal">&#10005;</button>
+        </header>
+        <div class="modal-body">
+            <label>Nazwa <input id="team-name-input" type="text"></label>
+            <label>Herb (plik)
+                <input id="team-crest-file" type="file" accept="image/*">
+            </label>
+            <label>Goalsong
+                <select id="team-goalsong-track">
+                    <option value="">Brak</option>
+                </select>
+            </label>
+            <label>G&#322;o&#347;no&#347;&#263; goalsong <input id="team-goalsong-volume" type="range" min="0" max="1" step="0.1" value="0.8"></label>
+            <label>Czas goalsong (s), -1 = ca&#322;y <input id="team-goalsong-duration" type="number" min="-1" max="600" value="-1"></label>
+            <label>Kolor / motyw <input id="team-color-input" type="color" value="#2f95e2"></label>
+            <label>Gotowy motyw klubowy
+                <select id="team-theme-select">
+                    <option value="">Brak (wlasny)</option>
+                </select>
+            </label>
+            <button id="team-clear-emblem" class="small-action-btn">Usu&#324; herb</button>
+            <div class="transfer-menu">
+                <button id="team-transfer-btn" class="small-action-btn" type="button">Transfer dru&#380;yny</button>
+                <div id="team-transfer-panel" class="transfer-panel is-hidden">
+                    <button id="team-export-btn" class="small-action-btn" type="button">Eksportuj dru&#380;yn&#281;</button>
+                    <button id="team-import-btn" class="small-action-btn" type="button">Wczytaj dru&#380;yn&#281;</button>
+                </div>
+            </div>
+            <input id="team-import-file" type="file" accept="application/json" class="is-hidden">
+            <button id="team-save-btn" class="small-action-btn">Zapisz</button>
+        </div>
+    </section>
+
+    <section id="widgets-modal" class="panel modal widgets-modal is-hidden">
+        <header class="modal-head">
+            <h2>Wid&#380;ety</h2>
+            <button class="close-modal" data-close="widgets-modal">&#10005;</button>
+        </header>
+        <div class="modal-body">
+            <div class="widget-toggles">
+                <button class="widget-toggle-btn" id="widget-toggle-orientation" data-widget-toggle="orientation">Orientacja</button>
+                <button class="widget-toggle-btn" id="widget-toggle-dark" data-widget-toggle="dark">Ciemny</button>
+                <button class="widget-toggle-btn is-active" id="widget-toggle-timer" data-widget-toggle="timer">Minutnik</button>
+                <button class="widget-toggle-btn is-active" id="widget-toggle-sets" data-widget-toggle="sets">Sety</button>
+                <button class="widget-toggle-btn is-active" id="widget-toggle-names" data-widget-toggle="names">Nazwy</button>
+            </div>
+            <details class="advanced-widget">
+                <summary>Zaawansowane</summary>
+                <div class="advanced-grid">
+                    <label class="range-field">Rozmiar punkt&#243;w
+                        <span class="range-wrap" style="--default-pos: 30%;">
+                            <input id="widget-score-size" type="range" min="70" max="170" value="100">
+                        </span>
+                    </label>
+                    <label class="range-field">Rozmiar nazw
+                        <span class="range-wrap" style="--default-pos: 33.33%;">
+                            <input id="widget-name-size" type="range" min="70" max="160" value="100">
+                        </span>
+                    </label>
+                    <label class="range-field">Rozmiar timera
+                        <span class="range-wrap" style="--default-pos: 33.33%;">
+                            <input id="widget-timer-size" type="range" min="70" max="160" value="100">
+                        </span>
+                    </label>
+                    <label class="range-field">Rozmiar herbu
+                        <span class="range-wrap" style="--default-pos: 33.33%;">
+                            <input id="widget-crest-size" type="range" min="70" max="160" value="100">
+                        </span>
+                    </label>
+                    <label class="range-field">Pozycja nazw (Y)
+                        <span class="range-wrap" style="--default-pos: 50%;">
+                            <input id="widget-name-y" type="range" min="-180" max="180" value="0">
+                        </span>
+                    </label>
+                    <label class="range-field">Pozycja herbu (Y)
+                        <span class="range-wrap" style="--default-pos: 50%;">
+                            <input id="widget-crest-y" type="range" min="-180" max="180" value="0">
+                        </span>
+                    </label>
+                    <label class="range-field">Pozycja panelu &#347;rodka (Y)
+                        <span class="range-wrap" style="--default-pos: 50%;">
+                            <input id="widget-center-y" type="range" min="-120" max="120" value="0">
+                        </span>
+                    </label>
+                    <label class="range-field">Pozycja dolnego menu (Y)
+                        <span class="range-wrap" style="--default-pos: 29.26%;">
+                            <input id="widget-menu-y" type="range" min="-120" max="420" value="38">
+                        </span>
+                    </label>
+                    <label class="range-field">Rozmiar dolnego menu
+                        <span class="range-wrap" style="--default-pos: 33.33%;">
+                            <input id="widget-menu-size" type="range" min="70" max="160" value="100">
+                        </span>
+                    </label>
+                </div>
+                <button id="widget-advanced-reset" type="button" class="small-action-btn">Resetuj zaawansowane</button>
+            </details>
+            <div id="widget-preview" class="widget-preview"></div>
+        </div>
+    </section>
+
+    <section id="settings-modal" class="panel modal settings-drawer is-hidden">
+        <header class="modal-head">
+            <h2>Ustawienia</h2>
+            <button class="close-modal" data-close="settings-modal">&#10005;</button>
+        </header>
+        <div class="modal-body settings-grid">
+            <div class="settings-col">
+                <fieldset>
+                    <legend>Og&#243;lne</legend>
+                    <label class="row-toggle"><span>Przesu&#324; aby zmieni&#263; wynik</span><input id="swipe-score" type="checkbox" checked></label>
+                    <label class="row-toggle"><span>Przesu&#324; w d&#243;&#322; = zmniejsz</span><input id="swipe-down-minus" type="checkbox" checked></label>
+                    <label class="row-toggle"><span>Pytaj o przyznanie seta</span><input id="ask-set-award" type="checkbox"></label>
+                </fieldset>
+
+                <fieldset>
+                    <legend>Audio</legend>
+                    <label class="row-toggle"><span>Og&#322;aszanie wyniku</span><input id="audio-enabled" type="checkbox"></label>
+                    <label>G&#322;os <select id="audio-voice"><option value="">Domyslny</option></select></label>
+                    <label>Szybko&#347;&#263; <input id="audio-rate" type="range" min="0.5" max="2" step="0.1" value="1"></label>
+                    <label>G&#322;o&#347;no&#347;&#263; <input id="audio-volume" type="range" min="0" max="1" step="0.1" value="1"></label>
+                    <label>Format <input id="audio-format" type="text" value="Lewi {w1} - Prawi {w2}"></label>
+                </fieldset>
+            </div>
+
+            <div class="settings-col">
+                <fieldset>
+                    <legend>Mecz</legend>
+                    <label>Punkty do seta <input id="points-to-set" type="number" min="-1" max="99" value="25"></label>
+                    <label>Przewaga do seta <input id="set-advantage" type="number" min="0" max="10" value="2"></label>
+                    <label>Sety do meczu <input id="sets-to-match" type="number" min="1" max="9" value="3"></label>
+                    <label class="row-toggle"><span>W&#322;&#261;cz sety</span><input id="sets-enabled" type="checkbox"></label>
+                    <label class="row-toggle"><span>Animacje seta</span><input id="set-animations-enabled" type="checkbox" checked></label>
+                    <details class="team-settings-card">
+                        <summary>Domy&#347;lne ustawienia Gracza 1</summary>
+                        <label>Nazwa <input id="default-name-1" type="text" value="Player 1"></label>
+                        <label>Kolor <input id="default-color-1" type="color" value="#2f95e2"></label>
+                        <label>Motyw
+                            <select id="default-theme-1">
+                                <option value="">Brak (wlasny)</option>
+                            </select>
+                        </label>
+                        <label>Goalsong
+                            <select id="default-goalsong-track-1">
+                                <option value="">Brak</option>
+                            </select>
+                        </label>
+                        <label>G&#322;o&#347;no&#347;&#263; goalsong <input id="default-goalsong-volume-1" type="range" min="0" max="1" step="0.1" value="0.8"></label>
+                        <label>Czas goalsong (s), -1 = ca&#322;y <input id="default-goalsong-duration-1" type="number" min="-1" max="600" value="-1"></label>
+                    </details>
+                    <details class="team-settings-card">
+                        <summary>Domy&#347;lne ustawienia Gracza 2</summary>
+                        <label>Nazwa <input id="default-name-2" type="text" value="Player 2"></label>
+                        <label>Kolor <input id="default-color-2" type="color" value="#ff3b35"></label>
+                        <label>Motyw
+                            <select id="default-theme-2">
+                                <option value="">Brak (wlasny)</option>
+                            </select>
+                        </label>
+                        <label>Goalsong
+                            <select id="default-goalsong-track-2">
+                                <option value="">Brak</option>
+                            </select>
+                        </label>
+                        <label>G&#322;o&#347;no&#347;&#263; goalsong <input id="default-goalsong-volume-2" type="range" min="0" max="1" step="0.1" value="0.8"></label>
+                        <label>Czas goalsong (s), -1 = ca&#322;y <input id="default-goalsong-duration-2" type="number" min="-1" max="600" value="-1"></label>
+                    </details>
+                </fieldset>
+
+                <fieldset>
+                    <legend>Minutnik</legend>
+                    <label>Czas trwania <input id="countdown-length" type="text" value="-1"></label>
+                    <label class="row-toggle"><span>Odliczanie</span><input id="countdown-enabled" type="checkbox"></label>
+                    <label class="row-toggle"><span>D&#378;wi&#281;k minutnika</span><input id="countdown-sound" type="checkbox"></label>
+                    <label>Format
+                        <select id="countdown-format">
+                            <option value="hms">Godziny minuty sekundy</option>
+                            <option value="ms">Minuty sekundy</option>
+                        </select>
+                    </label>
+                </fieldset>
+            </div>
+        </div>
+        <div class="settings-actions">
+            <div class="transfer-menu">
+                <button id="settings-transfer-btn" class="small-action-btn" type="button">Transfer danych</button>
+                <div id="settings-transfer-panel" class="transfer-panel is-hidden">
+                    <button id="export-all-btn" class="small-action-btn" type="button">Eksportuj wszystko</button>
+                    <button id="export-settings-btn" class="small-action-btn" type="button">Eksportuj ustawienia</button>
+                    <button id="import-all-btn" class="small-action-btn" type="button">Wczytaj</button>
+                </div>
+            </div>
+            <input id="import-all-file" type="file" accept="application/json" class="is-hidden">
+            <button id="reset-all-settings" class="reset-all-btn" type="button">Zresetuj wszystko</button>
+        </div>
+    </section>
+
+    <script src="script.js"></script>
+    <footer class="license-footer">
+        <a href="https://szymixx7.github.io/S7-Scoreboard-APP" tabindex="-1">S7 Scoreboard APP</a>
+        <span>&#169; 2026 by</span>
+        <a href="https://www.instagram.com/xszymon7/" tabindex="-1">Szymix7</a>
+        <span>is licensed under</span>
+        <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/" tabindex="-1">CC BY-NC-ND 4.0</a>
+        <img src="https://mirrors.creativecommons.org/presskit/icons/cc.svg" alt="">
+        <img src="https://mirrors.creativecommons.org/presskit/icons/by.svg" alt="">
+        <img src="https://mirrors.creativecommons.org/presskit/icons/nc.svg" alt="">
+        <img src="https://mirrors.creativecommons.org/presskit/icons/nd.svg" alt="">
+    </footer>
+</body>
+</html>
