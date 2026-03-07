@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <title>S7 Scoreboard Overlay</title>
+    <title>S7 Scoreboard APP</title>
 </head>
 <body>
     <main id="overlay" class="overlay">
@@ -109,6 +109,7 @@
             <label>G&#322;o&#347;no&#347;&#263; goalsong <input id="team-goalsong-volume" type="range" min="0" max="1" step="0.1" value="0.8"></label>
             <label>Czas goalsong (s), -1 = ca&#322;y <input id="team-goalsong-duration" type="number" min="-1" max="600" value="-1"></label>
             <label>Kolor / motyw <input id="team-color-input" type="color" value="#2f95e2"></label>
+            <label>Kolor czcionki i ikonek <input id="team-text-color-input" type="color" value="#ffffff"></label>
             <label>Gotowy motyw klubowy
                 <select id="team-theme-select">
                     <option value="">Brak (wlasny)</option>
@@ -239,6 +240,7 @@
                         <summary>Domy&#347;lne ustawienia Gracza 1</summary>
                         <label>Nazwa <input id="default-name-1" type="text" value="Player 1"></label>
                         <label>Kolor <input id="default-color-1" type="color" value="#2f95e2"></label>
+                        <label>Kolor czcionki i ikonek <input id="default-text-color-1" type="color" value="#ffffff"></label>
                         <label>Motyw
                             <select id="default-theme-1">
                                 <option value="">Brak (wlasny)</option>
@@ -259,6 +261,7 @@
                         <summary>Domy&#347;lne ustawienia Gracza 2</summary>
                         <label>Nazwa <input id="default-name-2" type="text" value="Player 2"></label>
                         <label>Kolor <input id="default-color-2" type="color" value="#ff3b35"></label>
+                        <label>Kolor czcionki i ikonek <input id="default-text-color-2" type="color" value="#ffffff"></label>
                         <label>Motyw
                             <select id="default-theme-2">
                                 <option value="">Brak (wlasny)</option>
