@@ -85,6 +85,7 @@ const state = {
         menuScale: 100
     },
     settings: {
+        clickScoreEnabled: true,
         swipeScore: true,
         swipeDownMinus: true,
         swipeArea: "score",
@@ -182,6 +183,7 @@ const widgetInputs = {
 };
 
 const settingInputs = {
+    clickScoreEnabled: document.getElementById("click-score-enabled"),
     swipe: document.getElementById("swipe-score"),
     swipeDownMinus: document.getElementById("swipe-down-minus"),
     swipeArea: document.getElementById("swipe-area"),
@@ -343,6 +345,7 @@ function resetAllState() {
         menuScale: 100
     };
         state.settings = {
+            clickScoreEnabled: true,
             swipeScore: true,
             swipeDownMinus: true,
             swipeArea: "score",
@@ -891,7 +894,7 @@ function renderScores() {
     el.sideLeft.style.color = leftTeam.textColor;
     el.sideRight.style.color = rightTeam.textColor;
 
-    const scoreScale = Math.max(70, Math.min(140, state.widgets.scoreScale)) / 100;
+    const scoreScale = Math.max(70, Math.min(220, state.widgets.scoreScale)) / 100;
     const nameScale = Math.max(70, Math.min(160, state.widgets.nameScale)) / 100;
     const baseOffset = 28;
     const extraOffset = (nameScale - 1) * 8;
@@ -1236,7 +1239,7 @@ function bindTimeEditorDrag() {
 
 function bindScoreGestures(scoreElement, slot) {
     scoreElement.addEventListener("mousedown", (event) => {
-        if (!state.settings.swipeScore) {
+        if (!state.settings.swipeScore || !state.settings.clickScoreEnabled) {
             return;
         }
         if (event.button === 0) {
@@ -1248,7 +1251,7 @@ function bindScoreGestures(scoreElement, slot) {
     });
 
     scoreElement.addEventListener("contextmenu", (event) => {
-        if (state.settings.swipeScore) {
+        if (state.settings.swipeScore && state.settings.clickScoreEnabled) {
             event.preventDefault();
         }
     });
@@ -1844,6 +1847,10 @@ function updateTeamFromSettings(teamIndex) {
 }
 
 function bindSettingsInputs() {
+    settingInputs.clickScoreEnabled.addEventListener("change", () => {
+        state.settings.clickScoreEnabled = settingInputs.clickScoreEnabled.checked;
+        saveState();
+    });
     settingInputs.swipe.addEventListener("change", () => {
         state.settings.swipeScore = settingInputs.swipe.checked;
         saveState();
@@ -2125,6 +2132,7 @@ function bindSettingsInputs() {
 
 function initializeDefaults() {
     loadState();
+    state.settings.clickScoreEnabled = state.settings.clickScoreEnabled !== false;
     state.settings.countdownFormat = state.settings.countdownFormat === "ms" ? "ms" : "hms";
     state.settings.voiceGoalCommandsEnabled = Boolean(state.settings.voiceGoalCommandsEnabled);
     state.settings.swipeArea = state.settings.swipeArea === "side" ? "side" : "score";
@@ -2159,6 +2167,7 @@ function initializeDefaults() {
     widgetInputs.centerY.value = String(state.widgets.centerY);
     widgetInputs.menuY.value = String(state.widgets.menuY);
     widgetInputs.menuSize.value = String(state.widgets.menuScale);
+    settingInputs.clickScoreEnabled.checked = state.settings.clickScoreEnabled;
     settingInputs.swipeDownMinus.checked = state.settings.swipeDownMinus;
     settingInputs.swipe.checked = state.settings.swipeScore;
     settingInputs.swipeArea.value = state.settings.swipeArea;
