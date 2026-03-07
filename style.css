@@ -66,9 +66,12 @@ select {
 .quick-btn {
     position: absolute;
     top: 20px;
-    border: 0;
-    background: rgb(255 255 255 / 22%);
-    color: #fff;
+    border: 1px solid rgb(255 255 255 / 52%);
+    background: rgb(0 0 0 / 32%);
+    color: inherit;
+    backdrop-filter: blur(4px);
+    text-shadow: 0 1px 2px rgb(0 0 0 / 45%);
+    box-shadow: 0 4px 10px rgb(0 0 0 / 28%);
     cursor: pointer;
 }
 
@@ -88,10 +91,13 @@ select {
 .stop-btn {
     position: absolute;
     top: 20px;
-    border: 0;
+    border: 1px solid rgb(255 255 255 / 52%);
     border-radius: 12px;
-    background: rgb(255 255 255 / 22%);
-    color: #fff;
+    background: rgb(0 0 0 / 32%);
+    color: inherit;
+    backdrop-filter: blur(4px);
+    text-shadow: 0 1px 2px rgb(0 0 0 / 45%);
+    box-shadow: 0 4px 10px rgb(0 0 0 / 28%);
     padding: 3px 8px;
     font-size: clamp(20px, 1.4vw, 28px);
     cursor: pointer;
@@ -228,6 +234,7 @@ select {
     align-items: center;
     gap: 8px;
     transform-origin: center top;
+    overflow: hidden;
 }
 
 .timer-btn,
@@ -235,6 +242,8 @@ select {
     border: 0;
     color: var(--ink);
     background: transparent;
+    min-width: 0;
+    line-height: 1;
 }
 
 .timer-btn {
@@ -501,6 +510,13 @@ select {
 .modal-body select {
     width: 100%;
     min-width: 0;
+}
+
+.modal-body input[type="color"] {
+    min-height: 46px;
+    border-radius: 12px;
+    padding: 4px;
+    cursor: pointer;
 }
 
 .inline-goalsong .goalsong-inline-wrap {
@@ -915,6 +931,10 @@ legend {
         font-size: 18px;
     }
 
+    .modal-body input[type="color"] {
+        min-height: 56px;
+    }
+
     .preview-side .preview-score {
         font-size: 76px;
     }
@@ -949,6 +969,32 @@ legend {
         min-height: 320px;
     }
 
+}
+
+@media (max-width: 900px) {
+    .side-left .edit-btn {
+        left: 8px;
+    }
+
+    .side-left .quick-btn {
+        left: 54px;
+    }
+
+    .side-left .stop-btn {
+        left: 100px;
+    }
+
+    .side-right .edit-btn {
+        right: 8px;
+    }
+
+    .side-right .quick-btn {
+        right: 54px;
+    }
+
+    .side-right .stop-btn {
+        right: 100px;
+    }
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
