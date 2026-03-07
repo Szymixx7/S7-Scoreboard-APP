@@ -63,6 +63,8 @@ const state = {
     voiceRecognitionActive: false,
     voiceRecognitionStarting: false,
     voiceMicStream: null,
+    voiceRecognitionStartedAt: 0,
+    voiceLastSpeechAt: 0,
     voiceLastCommandAt: 0,
     voiceLastCommandKey: "",
     goalsongFiles: [],
@@ -720,6 +722,8 @@ function stopVoiceGoalRecognition() {
     state.voiceRecognitionEnabled = false;
     state.voiceRecognitionActive = false;
     state.voiceRecognitionStarting = false;
+    state.voiceRecognitionStartedAt = 0;
+    state.voiceLastSpeechAt = 0;
     state.voiceLastCommandAt = 0;
     state.voiceLastCommandKey = "";
     if (state.voiceRecognitionRestartTimer) {
@@ -794,8 +798,10 @@ function startVoiceGoalRecognition() {
         recognition.onstart = () => {
             state.voiceRecognitionStarting = false;
             state.voiceRecognitionActive = true;
+            state.voiceRecognitionStartedAt = Date.now();
         };
         recognition.onresult = (event) => {
+            state.voiceLastSpeechAt = Date.now();
             for (let i = event.resultIndex; i < event.results.length; i += 1) {
                 const result = event.results[i];
                 for (let j = 0; j < result.length; j += 1) {
@@ -812,7 +818,18 @@ function startVoiceGoalRecognition() {
             if (!state.voiceRecognitionEnabled) {
                 return;
             }
-            scheduleVoiceRecognitionRestart(260);
+            const now = Date.now();
+            const sessionMs = state.voiceRecognitionStartedAt ? now - state.voiceRecognitionStartedAt : 0;
+            const silenceMs = state.voiceLastSpeechAt ? now - state.voiceLastSpeechAt : Infinity;
+            let restartDelay = 320;
+            if (sessionMs < 1500) {
+                restartDelay = 1800;
+            } else if (sessionMs < 3000 && silenceMs > 1800) {
+                restartDelay = 1200;
+            } else if (silenceMs > 6000) {
+                restartDelay = 850;
+            }
+            scheduleVoiceRecognitionRestart(restartDelay);
         };
         recognition.onerror = (event) => {
             if (event?.error === "not-allowed" || event?.error === "service-not-allowed") {
@@ -991,7 +1008,8 @@ function renderWidgets() {
     const safeMenuY = isMobileLandscape
         ? Math.max(-18, Math.min(Math.round(viewportHeight * 0.12), state.widgets.menuY))
         : state.widgets.menuY;
-    el.menuWrap.style.transform = `translateY(${safeMenuY}px)`;
+    const landscapeMenuLift = isMobileLandscape ? -Math.max(16, Math.round(viewportHeight * 0.06)) : 0;
+    el.menuWrap.style.transform = `translateY(${safeMenuY + landscapeMenuLift}px)`;
     const menuScale = Math.max(70, Math.min(160, state.widgets.menuScale || 100)) / 100;
     el.controlMenu.style.setProperty("--menu-scale", String(menuScale));
     updateWidgetPreview();
