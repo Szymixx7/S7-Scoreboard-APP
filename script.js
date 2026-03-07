@@ -1,4 +1,4 @@
-﻿
+
 const DEFAULT_TIMER_SECONDS = 0;
 
 const CLUB_THEMES = [
@@ -57,6 +57,11 @@ const state = {
     future: [],
     editingSlot: null,
     activeGoalAudio: null,
+    voiceRecognition: null,
+    voiceRecognitionRestartTimer: null,
+    voiceRecognitionEnabled: false,
+    voiceLastCommandAt: 0,
+    voiceLastCommandKey: "",
     goalsongFiles: [],
     widgets: {
         orientationVertical: false,
@@ -83,7 +88,9 @@ const state = {
         setsToMatch: 3,
         askSetAward: false,
         setAnimationsEnabled: true,
+        voiceGoalCommandsEnabled: false,
         countdownEnabled: false,
+        countdownFormat: "hms",
         countdownLengthSeconds: -1,
         audioEnabled: false,
         audioVoice: "",
@@ -172,6 +179,7 @@ const settingInputs = {
     swipe: document.getElementById("swipe-score"),
     swipeDownMinus: document.getElementById("swipe-down-minus"),
     askSetAward: document.getElementById("ask-set-award"),
+    voiceGoalEnabled: document.getElementById("voice-goal-enabled"),
     setsEnabled: document.getElementById("sets-enabled"),
     pointsToSet: document.getElementById("points-to-set"),
     setAdvantage: document.getElementById("set-advantage"),
@@ -195,6 +203,7 @@ const settingInputs = {
     audioVolume: document.getElementById("audio-volume"),
     audioFormat: document.getElementById("audio-format"),
     countdownLength: document.getElementById("countdown-length"),
+    countdownFormat: document.getElementById("countdown-format"),
     countdownEnabled: document.getElementById("countdown-enabled")
 };
 
@@ -335,7 +344,9 @@ function resetAllState() {
             setsToMatch: 3,
             askSetAward: false,
             setAnimationsEnabled: true,
+            voiceGoalCommandsEnabled: false,
             countdownEnabled: false,
+            countdownFormat: "hms",
             countdownLengthSeconds: -1,
             audioEnabled: false,
             audioVoice: "",
@@ -353,14 +364,27 @@ function pad(value) {
 
 function formatClock(totalSeconds) {
     const safe = Math.max(0, totalSeconds);
+    const useMinuteSecondFormat = state.settings.countdownFormat === "ms";
     const hours = Math.floor(safe / 3600);
-    const minutes = Math.floor((safe % 3600) / 60);
+    const minutes = useMinuteSecondFormat
+        ? Math.floor(safe / 60)
+        : Math.floor((safe % 3600) / 60);
     const seconds = safe % 60;
+    if (useMinuteSecondFormat) {
+        return `${pad(minutes)}:${pad(seconds)}`;
+    }
     return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
 
 function getTimeParts(totalSeconds) {
     const safe = Math.max(0, totalSeconds);
+    if (state.settings.countdownFormat === "ms") {
+        return {
+            hours: 0,
+            minutes: Math.floor(safe / 60),
+            seconds: safe % 60
+        };
+    }
     return {
         hours: Math.floor(safe / 3600),
         minutes: Math.floor((safe % 3600) / 60),
@@ -369,10 +393,15 @@ function getTimeParts(totalSeconds) {
 }
 
 function setTimeFromParts(parts) {
+    const useMinuteSecondFormat = state.settings.countdownFormat === "ms";
     const hours = Math.max(0, Math.min(99, parts.hours));
-    const minutes = Math.max(0, Math.min(59, parts.minutes));
+    const minutes = useMinuteSecondFormat
+        ? Math.max(0, Math.min(9999, parts.minutes))
+        : Math.max(0, Math.min(59, parts.minutes));
     const seconds = Math.max(0, Math.min(59, parts.seconds));
-    state.timerSeconds = hours * 3600 + minutes * 60 + seconds;
+    state.timerSeconds = useMinuteSecondFormat
+        ? minutes * 60 + seconds
+        : hours * 3600 + minutes * 60 + seconds;
 }
 
 function parseTimeInput(value) {
@@ -516,11 +545,17 @@ function updateCrestScaling() {
 function adjustTimeUnit(unit, delta) {
     pushHistory();
     const parts = getTimeParts(state.timerSeconds);
+    const useMinuteSecondFormat = state.settings.countdownFormat === "ms";
     if (unit === "hours") {
+        if (useMinuteSecondFormat) {
+            return;
+        }
         parts.hours = Math.max(0, Math.min(99, parts.hours + delta));
     }
     if (unit === "minutes") {
-        parts.minutes = (parts.minutes + delta + 60) % 60;
+        parts.minutes = useMinuteSecondFormat
+            ? Math.max(0, Math.min(9999, parts.minutes + delta))
+            : (parts.minutes + delta + 60) % 60;
     }
     if (unit === "seconds") {
         parts.seconds = (parts.seconds + delta + 60) % 60;
@@ -633,6 +668,142 @@ function speakScore() {
     speechSynthesis.speak(utterance);
 }
 
+function normalizeSpeechText(text) {
+    return String(text || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function applyVoiceGoalCommand(transcript) {
+    const text = normalizeSpeechText(transcript);
+    const hasGoalWord = /\b(go+l|goal|bramk\w*|punkt\w*)\b/.test(text);
+    if (!hasGoalWord) {
+        return false;
+    }
+    const homeMatch = /\b(gospodar\w*|lew\w*|left|home)\b/.test(text);
+    const awayMatch = /\b(gosc\w*|praw\w*|right|away)\b/.test(text);
+    const now = Date.now();
+    if (homeMatch && !awayMatch) {
+        const key = "left";
+        if (state.voiceLastCommandKey === key && now - state.voiceLastCommandAt < 900) {
+            return false;
+        }
+        state.voiceLastCommandKey = key;
+        state.voiceLastCommandAt = now;
+        changeScore("left", 1);
+        return true;
+    }
+    if (awayMatch && !homeMatch) {
+        const key = "right";
+        if (state.voiceLastCommandKey === key && now - state.voiceLastCommandAt < 900) {
+            return false;
+        }
+        state.voiceLastCommandKey = key;
+        state.voiceLastCommandAt = now;
+        changeScore("right", 1);
+        return true;
+    }
+    return false;
+}
+
+function stopVoiceGoalRecognition() {
+    state.voiceRecognitionEnabled = false;
+    state.voiceLastCommandAt = 0;
+    state.voiceLastCommandKey = "";
+    if (state.voiceRecognitionRestartTimer) {
+        window.clearTimeout(state.voiceRecognitionRestartTimer);
+        state.voiceRecognitionRestartTimer = null;
+    }
+    if (state.voiceRecognition) {
+        try {
+            state.voiceRecognition.stop();
+        } catch (_) {}
+    }
+}
+
+function isVoiceRecognitionSupported() {
+    return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+
+function requestMicrophonePermission() {
+    if (!navigator.mediaDevices?.getUserMedia) {
+        return Promise.resolve(false);
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: true })
+        .then((stream) => {
+            stream.getTracks().forEach((track) => track.stop());
+            return true;
+        })
+        .catch(() => false);
+}
+
+function startVoiceGoalRecognition() {
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+        state.settings.voiceGoalCommandsEnabled = false;
+        settingInputs.voiceGoalEnabled.checked = false;
+        saveState();
+        return false;
+    }
+    if (state.voiceRecognitionRestartTimer) {
+        window.clearTimeout(state.voiceRecognitionRestartTimer);
+        state.voiceRecognitionRestartTimer = null;
+    }
+    state.voiceRecognitionEnabled = true;
+    if (!state.voiceRecognition) {
+        const recognition = new SpeechRecognitionCtor();
+        recognition.lang = "pl-PL";
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 3;
+        recognition.onresult = (event) => {
+            for (let i = event.resultIndex; i < event.results.length; i += 1) {
+                const result = event.results[i];
+                for (let j = 0; j < result.length; j += 1) {
+                    if (applyVoiceGoalCommand(result[j]?.transcript || "")) {
+                        return;
+                    }
+                }
+            }
+        };
+        recognition.onend = () => {
+            if (!state.voiceRecognitionEnabled) {
+                return;
+            }
+            state.voiceRecognitionRestartTimer = window.setTimeout(() => {
+                startVoiceGoalRecognition();
+            }, 220);
+        };
+        recognition.onerror = (event) => {
+            if (event?.error === "not-allowed" || event?.error === "service-not-allowed") {
+                state.settings.voiceGoalCommandsEnabled = false;
+                settingInputs.voiceGoalEnabled.checked = false;
+                stopVoiceGoalRecognition();
+                saveState();
+                window.alert("Brak dostepu do mikrofonu. Zezwol na mikrofon i wlacz opcje ponownie.");
+                return;
+            }
+            if (!state.voiceRecognitionEnabled) {
+                return;
+            }
+            state.voiceRecognitionRestartTimer = window.setTimeout(() => {
+                startVoiceGoalRecognition();
+            }, 450);
+        };
+        state.voiceRecognition = recognition;
+    }
+    try {
+        state.voiceRecognition.start();
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
 function renderScores() {
     const leftTeam = getTeamAt("left");
     const rightTeam = getTeamAt("right");
@@ -684,6 +855,8 @@ function renderTime() {
     el.timerToggle.innerHTML = state.timerRunning ? "&#10074;&#10074;" : "&#9654;";
 
     const parts = getTimeParts(state.timerSeconds);
+    const useMinuteSecondFormat = state.settings.countdownFormat === "ms";
+    el.timeEditor.classList.toggle("is-ms-format", useMinuteSecondFormat);
     el.timeEditor.querySelector('.time-value[data-unit="hours"]').textContent = pad(parts.hours);
     el.timeEditor.querySelector('.time-value[data-unit="minutes"]').textContent = pad(parts.minutes);
     el.timeEditor.querySelector('.time-value[data-unit="seconds"]').textContent = pad(parts.seconds);
@@ -1527,6 +1700,41 @@ function bindSettingsInputs() {
         state.settings.askSetAward = settingInputs.askSetAward.checked;
         saveState();
     });
+    settingInputs.voiceGoalEnabled.addEventListener("change", () => {
+        state.settings.voiceGoalCommandsEnabled = settingInputs.voiceGoalEnabled.checked;
+        if (state.settings.voiceGoalCommandsEnabled) {
+            if (!isVoiceRecognitionSupported()) {
+                state.settings.voiceGoalCommandsEnabled = false;
+                settingInputs.voiceGoalEnabled.checked = false;
+                stopVoiceGoalRecognition();
+                window.alert("Ta przegladarka nie wspiera komend glosowych (SpeechRecognition). Uzyj Chrome/Edge na HTTPS lub localhost.");
+            } else {
+                requestMicrophonePermission().then((granted) => {
+                    if (!state.settings.voiceGoalCommandsEnabled) {
+                        return;
+                    }
+                    if (!granted) {
+                        state.settings.voiceGoalCommandsEnabled = false;
+                        settingInputs.voiceGoalEnabled.checked = false;
+                        stopVoiceGoalRecognition();
+                        window.alert("Brak aktywnego dostepu do mikrofonu. Wlacz mikrofon dla tej strony i sprobuj ponownie.");
+                        saveState();
+                        return;
+                    }
+                    if (!startVoiceGoalRecognition()) {
+                        state.settings.voiceGoalCommandsEnabled = false;
+                        settingInputs.voiceGoalEnabled.checked = false;
+                        stopVoiceGoalRecognition();
+                        window.alert("Nie udalo sie uruchomic rozpoznawania mowy. Odswiez strone i sprobuj ponownie.");
+                        saveState();
+                    }
+                });
+            }
+        } else {
+            stopVoiceGoalRecognition();
+        }
+        saveState();
+    });
     settingInputs.setsEnabled.addEventListener("change", () => {
         state.settings.setsEnabled = settingInputs.setsEnabled.checked;
         renderWidgets();
@@ -1597,6 +1805,12 @@ function bindSettingsInputs() {
             updateWidgetPreview();
         }
         settingInputs.countdownLength.value = formatDurationInput(state.settings.countdownLengthSeconds);
+    });
+
+    settingInputs.countdownFormat.addEventListener("change", () => {
+        state.settings.countdownFormat = settingInputs.countdownFormat.value === "ms" ? "ms" : "hms";
+        renderTime();
+        updateWidgetPreview();
     });
 
     settingInputs.countdownEnabled.addEventListener("change", () => {
@@ -1751,6 +1965,8 @@ function bindSettingsInputs() {
 
 function initializeDefaults() {
     loadState();
+    state.settings.countdownFormat = state.settings.countdownFormat === "ms" ? "ms" : "hms";
+    state.settings.voiceGoalCommandsEnabled = Boolean(state.settings.voiceGoalCommandsEnabled);
     state.widgets = {
         orientationVertical: false,
         darkMode: false,
@@ -1772,6 +1988,7 @@ function initializeDefaults() {
     fillThemeSelect(settingInputs.theme1);
     fillThemeSelect(settingInputs.theme2);
     settingInputs.countdownLength.value = formatDurationInput(state.settings.countdownLengthSeconds);
+    settingInputs.countdownFormat.value = state.settings.countdownFormat;
     widgetInputs.scoreSize.value = String(state.widgets.scoreScale);
     widgetInputs.nameSize.value = String(state.widgets.nameScale);
     widgetInputs.crestSize.value = String(state.widgets.crestScale);
@@ -1784,6 +2001,7 @@ function initializeDefaults() {
     settingInputs.swipeDownMinus.checked = state.settings.swipeDownMinus;
     settingInputs.swipe.checked = state.settings.swipeScore;
     settingInputs.askSetAward.checked = state.settings.askSetAward;
+    settingInputs.voiceGoalEnabled.checked = state.settings.voiceGoalCommandsEnabled;
     settingInputs.setsEnabled.checked = state.settings.setsEnabled;
     settingInputs.pointsToSet.value = String(state.settings.pointsToSet);
     settingInputs.setAdvantage.value = String(state.settings.setAdvantage);
@@ -1794,6 +2012,15 @@ function initializeDefaults() {
     settingInputs.audioVolume.value = String(state.settings.audioVolume);
     settingInputs.audioFormat.value = state.settings.audioFormat;
     settingInputs.countdownEnabled.checked = state.settings.countdownEnabled;
+    if (state.settings.voiceGoalCommandsEnabled) {
+        if (!isVoiceRecognitionSupported() || !startVoiceGoalRecognition()) {
+            state.settings.voiceGoalCommandsEnabled = false;
+            settingInputs.voiceGoalEnabled.checked = false;
+            stopVoiceGoalRecognition();
+        }
+    } else {
+        stopVoiceGoalRecognition();
+    }
     syncSettingsTeamInputs();
 }
 
@@ -1813,6 +2040,114 @@ function init() {
     loadGoalSongs();
     window.addEventListener("resize", updateCrestScaling);
     window.addEventListener("resize", updateWidgetPreview);
+    window.addEventListener("beforeunload", stopVoiceGoalRecognition);
 }
 
 init();
+
+
+// goalsong preview buttons runtime patch
+let gsPreviewAudio = null;
+let gsPreviewBtn = null;
+
+function stopGsPreview() {
+    if (gsPreviewAudio) {
+        gsPreviewAudio.pause();
+        gsPreviewAudio.currentTime = 0;
+        gsPreviewAudio = null;
+    }
+    if (gsPreviewBtn) {
+        gsPreviewBtn.classList.remove("is-playing");
+        gsPreviewBtn.innerHTML = "&#9654;";
+        gsPreviewBtn = null;
+    }
+}
+
+function toggleGsPreview(track, volume, duration, btn) {
+    if (!track) {
+        stopGsPreview();
+        return;
+    }
+    if (gsPreviewBtn === btn) {
+        stopGsPreview();
+        return;
+    }
+    stopGsPreview();
+    const srcEncoded = "goalsongs/" + encodeURIComponent(track);
+    const srcRaw = "goalsongs/" + track;
+    const audio = new Audio(srcEncoded);
+    audio.volume = Math.max(0, Math.min(1, Number(volume) || 0.8));
+    audio.currentTime = 0;
+    audio.play().catch(() => {
+        audio.src = srcRaw;
+        audio.play().catch(() => {});
+    });
+
+    gsPreviewAudio = audio;
+    gsPreviewBtn = btn;
+    btn.classList.add("is-playing");
+    btn.innerHTML = "&#9209;";
+
+    const d = Number(duration);
+    if (!Number.isNaN(d) && d >= 0) {
+        window.setTimeout(() => {
+            if (gsPreviewAudio === audio) {
+                stopGsPreview();
+            }
+        }, Math.max(1, d) * 1000);
+    }
+}
+function ensureGsPreviewButton(selectId, volumeId, durationId, buttonId) {
+    const select = document.getElementById(selectId);
+    if (!select) {
+        return;
+    }
+
+    let btn = document.getElementById(buttonId);
+    if (!btn) {
+        btn = document.createElement("button");
+        btn.type = "button";
+        btn.id = buttonId;
+        btn.className = "goalsong-preview-btn";
+        btn.innerHTML = "&#9654;";
+        btn.ariaLabel = "Podglad goalsonga";
+        select.insertAdjacentElement("afterend", btn);
+    }
+
+    btn.addEventListener("click", () => {
+        const volumeEl = document.getElementById(volumeId);
+        const durationEl = document.getElementById(durationId);
+        toggleGsPreview(select.value, volumeEl ? volumeEl.value : 0.8, durationEl ? durationEl.value : -1, btn);
+    });
+}
+function bindGsPreviewRuntime() {
+    ensureGsPreviewButton("team-goalsong-track", "team-goalsong-volume", "team-goalsong-duration", "team-goalsong-preview");
+    ensureGsPreviewButton("default-goalsong-track-1", "default-goalsong-volume-1", "default-goalsong-duration-1", "default-goalsong-preview-1");
+    ensureGsPreviewButton("default-goalsong-track-2", "default-goalsong-volume-2", "default-goalsong-duration-2", "default-goalsong-preview-2");
+
+    const backdrop = document.getElementById("modal-backdrop");
+    if (backdrop) {
+        backdrop.addEventListener("click", stopGsPreview);
+    }
+}
+
+bindGsPreviewRuntime();
+function wrapGsInline(selectId, buttonId) {
+    const select = document.getElementById(selectId);
+    const btn = document.getElementById(buttonId);
+    if (!select || !btn) {
+        return;
+    }
+    if (select.parentElement && select.parentElement.classList.contains("goalsong-inline-wrap")) {
+        return;
+    }
+    const wrap = document.createElement("span");
+    wrap.className = "goalsong-inline-wrap";
+    select.insertAdjacentElement("beforebegin", wrap);
+    wrap.append(select);
+    wrap.append(btn);
+}
+
+wrapGsInline("team-goalsong-track", "team-goalsong-preview");
+wrapGsInline("default-goalsong-track-1", "default-goalsong-preview-1");
+wrapGsInline("default-goalsong-track-2", "default-goalsong-preview-2");
