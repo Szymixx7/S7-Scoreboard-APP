@@ -2,6 +2,8 @@
 const DEFAULT_TIMER_SECONDS = 0;
 
 const CLUB_THEMES = [
+    { id: "blue", name: "Niebieski", color: "#2f95e2", textColor: "#ffffff" },
+    { id: "red", name: "Czerwony", color: "#ff3b35", textColor: "#ffffff" },
     { id: "real", name: "Real Madrid", color: "#f2f2f2", textColor: "#1f3b7a" },
     { id: "barca", name: "FC Barcelona", color: "#a60b2d", textColor: "#f2bd2e" },
     { id: "city", name: "Manchester City", color: "#6cabdd", textColor: "#ffffff" },
@@ -2571,3 +2573,4 @@ function wrapGsInline(selectId, buttonId) {
 wrapGsInline("team-goalsong-track", "team-goalsong-preview");
 wrapGsInline("default-goalsong-track-1", "default-goalsong-preview-1");
 wrapGsInline("default-goalsong-track-2", "default-goalsong-preview-2");
+
