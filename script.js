@@ -1259,17 +1259,6 @@ function renderWidgets() {
         el.menuWrap.style.transform = `translateY(${menuTranslateY}px)`;
     }
 
-    safeMenuY = menuTranslateY + safeCenterY;
-    const roundedCenterY = Math.round(safeCenterY);
-    const roundedMenuY = Math.round(safeMenuY);
-    if (roundedCenterY !== Math.round(state.widgets.centerY)) {
-        state.widgets.centerY = roundedCenterY;
-        widgetInputs.centerY.value = String(state.widgets.centerY);
-    }
-    if (roundedMenuY !== Math.round(state.widgets.menuY)) {
-        state.widgets.menuY = roundedMenuY;
-        widgetInputs.menuY.value = String(state.widgets.menuY);
-    }
     updateWidgetPreview();
     saveState();
 }
@@ -2518,8 +2507,6 @@ function initializeDefaults() {
         menuScale: 100,
         ...state.widgets
     };
-    // Always reset bottom menu position to default on page refresh.
-    state.widgets.menuY = 38;
     fillThemeSelect(el.teamThemeSelect);
     fillThemeSelect(settingInputs.theme1);
     fillThemeSelect(settingInputs.theme2);
@@ -2694,4 +2681,3 @@ function wrapGsInline(selectId, buttonId) {
 wrapGsInline("team-goalsong-track", "team-goalsong-preview");
 wrapGsInline("default-goalsong-track-1", "default-goalsong-preview-1");
 wrapGsInline("default-goalsong-track-2", "default-goalsong-preview-2");
-
