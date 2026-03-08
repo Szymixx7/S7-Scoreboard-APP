@@ -33,6 +33,7 @@ const FALLBACK_GOALSONGS = [
     "Liverpool F.C. 2023 Goal Song.wav",
     "Manchester City Goal song.wav",
     "Manchester United Goal Song 202425.wav",
+    "Now or Never Goal Song.wav",
     "Osasuna Goal Song.wav",
     "Poland National Team Anthem  Stadium Effect.wav",
     "Rayo Vallecano 2022 Goal Song.wav",
@@ -49,6 +50,9 @@ const AUDIO_VOICE_PRESETS = [
     { id: "__auto_pl", label: "Auto PL (rekomendowany)" },
     { id: "__pl_female", label: "Polski zenski (auto)" },
     { id: "__pl_male", label: "Polski meski (auto)" },
+    { id: "__pl_google", label: "Polski Google (auto)" },
+    { id: "__pl_microsoft", label: "Polski Microsoft (auto)" },
+    { id: "__pl_natural", label: "Polski naturalny (auto)" },
     { id: "__auto_enhanced", label: "Auto premium (PL/EN)" }
 ];
 
@@ -66,6 +70,7 @@ const state = {
     editingSlot: null,
     activeGoalAudio: null,
     activeGoalAudioSession: null,
+    scoreAnnouncementToken: 0,
     voiceRecognition: null,
     voiceRecognitionRestartTimer: null,
     voiceRecognitionEnabled: false,
@@ -719,9 +724,10 @@ function playGoalSong(slot) {
 
 function pickVoiceFromPreset(voices, presetId) {
     const isPolish = (voice) => /^pl\b/i.test(voice.lang) || /\bpolish\b|\bpolski\b/i.test(voice.name);
-    const preferFemale = (voice) => /\bfemale\b|\bkobiet|\bhelena\b|\bzofia\b/i.test(voice.name);
-    const preferMale = (voice) => /\bmale\b|\bmesk|\bjan\b|\bmarek\b/i.test(voice.name);
+    const preferFemale = (voice) => /\bfemale\b|\bkobiet|\bhelena\b|\bzofia\b|\bagnieszka\b|\bpaulina\b/i.test(voice.name);
+    const preferMale = (voice) => /\bmale\b|\bmesk|\bjan\b|\bmarek\b|\badam\b|\btomasz\b/i.test(voice.name);
     const polishVoices = voices.filter((voice) => isPolish(voice));
+    const byName = (pattern) => polishVoices.find((voice) => pattern.test(voice.name));
     if (presetId === "__pl_female") {
         return polishVoices.find((voice) => preferFemale(voice))
             || polishVoices[0]
@@ -737,12 +743,43 @@ function pickVoiceFromPreset(voices, presetId) {
             || polishVoices[0]
             || null;
     }
+    if (presetId === "__pl_google") {
+        return byName(/\bgoogle\b/i)
+            || polishVoices[0]
+            || null;
+    }
+    if (presetId === "__pl_microsoft") {
+        return byName(/\bmicrosoft\b/i)
+            || polishVoices[0]
+            || null;
+    }
+    if (presetId === "__pl_natural") {
+        return polishVoices.find((voice) => /\bneural\b|\bonline\b|\bnatural\b|\bpremium\b/i.test(voice.name))
+            || polishVoices.find((voice) => /\bgoogle\b|\bmicrosoft\b/i.test(voice.name))
+            || polishVoices[0]
+            || null;
+    }
     if (presetId === "__auto_pl") {
         return polishVoices.find((voice) => /\bgoogle\b|\bmicrosoft\b/i.test(voice.name))
             || polishVoices[0]
             || null;
     }
     return null;
+}
+
+function scheduleScoreAnnouncement(waitForPromise = null) {
+    const token = ++state.scoreAnnouncementToken;
+    const run = () => {
+        if (token !== state.scoreAnnouncementToken) {
+            return;
+        }
+        speakScore();
+    };
+    if (!waitForPromise || typeof waitForPromise.finally !== "function") {
+        run();
+        return;
+    }
+    waitForPromise.finally(run);
 }
 
 function speakScore() {
@@ -1076,7 +1113,7 @@ function renderWidgets() {
     const compactHeightScale = Math.max(0.45, Math.min(1, viewportHeight / 560));
     const compactWidthScale = Math.max(0.62, Math.min(1, viewportWidth / 1100));
     const compactScale = isMobileLandscape ? Math.min(compactHeightScale, compactWidthScale) : 1;
-    const timerScale = Math.max(70, Math.min(160, state.widgets.timerScale)) / 100;
+    const timerScale = Math.max(70, Math.min(220, state.widgets.timerScale)) / 100;
     const setScale = Math.max(70, Math.min(200, state.widgets.setScale || 100)) / 100;
     const cornerButtonsScale = Math.max(70, Math.min(200, state.widgets.cornerButtonsScale || 100)) / 100;
     const phoneTimerMultiplier = isPhone ? 0.72 : 1;
@@ -1113,7 +1150,9 @@ function renderWidgets() {
     el.controlMenu.querySelectorAll(".menu-btn").forEach((btn) => {
         btn.style.fontSize = `${Math.max(26, Math.round(52 * compactScale))}px`;
     });
-    const cornerButtonSize = Math.max(38, Math.round(46 * cornerButtonsScale * compactScale));
+    const cornerButtonSize = isPhone
+        ? Math.max(48, Math.round(52 * cornerButtonsScale * compactScale))
+        : Math.max(40, Math.round(46 * cornerButtonsScale * compactScale));
     const editFont = Math.max(18, Math.round(30 * cornerButtonsScale * compactScale));
     const quickFont = Math.max(16, Math.round(24 * cornerButtonsScale * compactScale));
     const stopFont = Math.max(15, Math.round(22 * cornerButtonsScale * compactScale));
@@ -1126,18 +1165,24 @@ function renderWidgets() {
         button.style.minHeight = `${cornerButtonSize}px`;
         button.style.fontSize = `${editFont}px`;
         button.style.padding = `${Math.max(2, Math.round(2 * cornerButtonsScale))}px ${Math.max(8, Math.round(8 * cornerButtonsScale))}px`;
+        button.style.zIndex = "30";
+        button.style.touchAction = "manipulation";
     });
     document.querySelectorAll(".quick-btn").forEach((button) => {
         button.style.minWidth = `${cornerButtonSize}px`;
         button.style.minHeight = `${cornerButtonSize}px`;
         button.style.fontSize = `${quickFont}px`;
         button.style.padding = `${Math.max(2, Math.round(2 * cornerButtonsScale))}px ${Math.max(8, Math.round(8 * cornerButtonsScale))}px`;
+        button.style.zIndex = "30";
+        button.style.touchAction = "manipulation";
     });
     document.querySelectorAll(".stop-btn").forEach((button) => {
         button.style.minWidth = `${cornerButtonSize}px`;
         button.style.minHeight = `${cornerButtonSize}px`;
         button.style.fontSize = `${stopFont}px`;
         button.style.padding = `${Math.max(3, Math.round(3 * cornerButtonsScale))}px ${Math.max(8, Math.round(8 * cornerButtonsScale))}px`;
+        button.style.zIndex = "30";
+        button.style.touchAction = "manipulation";
     });
     [el.sideLeft, el.sideRight].forEach((side) => {
         const isLeft = side === el.sideLeft;
@@ -1163,48 +1208,67 @@ function renderWidgets() {
             stopBtn.style.left = "";
         }
     });
-    let safeCenterY = isMobileLandscape
-        ? Math.max(-36, Math.min(42, state.widgets.centerY))
-        : state.widgets.centerY;
+    let safeCenterY = Number(state.widgets.centerY) || 0;
+    if (isMobileLandscape) {
+        safeCenterY = Math.max(-96, Math.min(96, safeCenterY));
+    }
     if (state.widgets.orientationVertical) {
         el.centerStack.style.transform = `translate(-50%, -50%) translateY(${safeCenterY}px)`;
     } else {
         el.centerStack.style.transform = `translateX(-50%) translateY(${safeCenterY}px)`;
     }
-    let safeMenuY = isMobileLandscape
-        ? Math.max(-18, Math.min(Math.round(viewportHeight * 0.12), state.widgets.menuY))
-        : state.widgets.menuY;
-    const landscapeMenuLift = isMobileLandscape ? -Math.max(16, Math.round(viewportHeight * 0.06)) : 0;
-    let phoneMenuY = isPhone ? (safeMenuY + landscapeMenuLift) * 0.5 : safeMenuY + landscapeMenuLift;
-    el.menuWrap.style.transform = `translateY(${phoneMenuY}px)`;
-    const menuScale = Math.max(70, Math.min(160, state.widgets.menuScale || 100)) / 100;
-    const effectiveMenuScale = isPhone ? menuScale * 0.5 : menuScale;
+    const menuScale = Math.max(70, Math.min(190, state.widgets.menuScale || 100)) / 100;
+    const effectiveMenuScale = menuScale * compactScale * (isPhone ? 0.9 : 1);
     el.controlMenu.style.setProperty("--menu-scale", String(effectiveMenuScale));
-    const centerRect = el.centerStack.getBoundingClientRect();
-    const menuRect = el.menuWrap.getBoundingClientRect();
+
+    let safeMenuY = Number(state.widgets.menuY) || 0;
+    let menuTranslateY = safeMenuY - safeCenterY;
+    el.menuWrap.style.transform = `translateY(${menuTranslateY}px)`;
+
     const margin = 8;
+    let centerRect = el.centerStack.getBoundingClientRect();
     if (centerRect.top < margin) {
         safeCenterY += margin - centerRect.top;
     } else if (centerRect.bottom > viewportHeight - margin) {
         safeCenterY -= centerRect.bottom - (viewportHeight - margin);
     }
-    if (menuRect.bottom > viewportHeight - margin) {
-        safeMenuY -= menuRect.bottom - (viewportHeight - margin);
-        phoneMenuY = isPhone ? (safeMenuY + landscapeMenuLift) * 0.5 : safeMenuY + landscapeMenuLift;
+    if (state.widgets.orientationVertical) {
+        el.centerStack.style.transform = `translate(-50%, -50%) translateY(${safeCenterY}px)`;
+    } else {
+        el.centerStack.style.transform = `translateX(-50%) translateY(${safeCenterY}px)`;
     }
-    if (Math.round(safeCenterY) !== Math.round(state.widgets.centerY)) {
-        state.widgets.centerY = Math.round(safeCenterY);
+
+    menuTranslateY = safeMenuY - safeCenterY;
+    el.menuWrap.style.transform = `translateY(${menuTranslateY}px)`;
+    let menuRect = el.menuWrap.getBoundingClientRect();
+    if (menuRect.top < margin) {
+        menuTranslateY += margin - menuRect.top;
+    } else if (menuRect.bottom > viewportHeight - margin) {
+        menuTranslateY -= menuRect.bottom - (viewportHeight - margin);
+    }
+    el.menuWrap.style.transform = `translateY(${menuTranslateY}px)`;
+    menuRect = el.menuWrap.getBoundingClientRect();
+
+    const visibleUpper = [el.timerPanel, el.setPanel].filter((panel) => !panel.classList.contains("widget-hidden"));
+    const upperBottom = visibleUpper.length
+        ? Math.max(...visibleUpper.map((panel) => panel.getBoundingClientRect().bottom))
+        : el.centerStack.getBoundingClientRect().top;
+    const minMenuTop = Math.round(upperBottom + margin);
+    if (menuRect.top < minMenuTop) {
+        menuTranslateY += minMenuTop - menuRect.top;
+        el.menuWrap.style.transform = `translateY(${menuTranslateY}px)`;
+    }
+
+    safeMenuY = menuTranslateY + safeCenterY;
+    const roundedCenterY = Math.round(safeCenterY);
+    const roundedMenuY = Math.round(safeMenuY);
+    if (roundedCenterY !== Math.round(state.widgets.centerY)) {
+        state.widgets.centerY = roundedCenterY;
         widgetInputs.centerY.value = String(state.widgets.centerY);
-        if (state.widgets.orientationVertical) {
-            el.centerStack.style.transform = `translate(-50%, -50%) translateY(${state.widgets.centerY}px)`;
-        } else {
-            el.centerStack.style.transform = `translateX(-50%) translateY(${state.widgets.centerY}px)`;
-        }
     }
-    if (Math.round(safeMenuY) !== Math.round(state.widgets.menuY)) {
-        state.widgets.menuY = Math.round(safeMenuY);
+    if (roundedMenuY !== Math.round(state.widgets.menuY)) {
+        state.widgets.menuY = roundedMenuY;
         widgetInputs.menuY.value = String(state.widgets.menuY);
-        el.menuWrap.style.transform = `translateY(${phoneMenuY}px)`;
     }
     updateWidgetPreview();
     saveState();
@@ -1301,14 +1365,9 @@ function changeScore(slot, delta, options = {}) {
     const shouldPlayGoalSong = options.playGoalSong !== false;
     const hasGoalSong = Boolean(team.goalsongTrack);
     if (delta > 0 && shouldPlayGoalSong && hasGoalSong) {
-        playGoalSong(slot).then(() => {
-            speakScore();
-        });
-        return;
-    }
-    speakScore();
-    if (delta > 0 && shouldPlayGoalSong) {
-        playGoalSong(slot);
+        scheduleScoreAnnouncement(playGoalSong(slot));
+    } else {
+        scheduleScoreAnnouncement();
     }
 }
 
@@ -2573,4 +2632,3 @@ function wrapGsInline(selectId, buttonId) {
 wrapGsInline("team-goalsong-track", "team-goalsong-preview");
 wrapGsInline("default-goalsong-track-1", "default-goalsong-preview-1");
 wrapGsInline("default-goalsong-track-2", "default-goalsong-preview-2");
-
