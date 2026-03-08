@@ -43,6 +43,12 @@ const FALLBACK_GOALSONGS = [
     "Zagłębie Lubin-Goal Song.wav"
 ];
 const STORAGE_KEY = "s7_overlay_state_v1";
+const AUDIO_VOICE_PRESETS = [
+    { id: "__auto_pl", label: "Auto PL (rekomendowany)" },
+    { id: "__pl_female", label: "Polski zenski (auto)" },
+    { id: "__pl_male", label: "Polski meski (auto)" },
+    { id: "__auto_enhanced", label: "Auto premium (PL/EN)" }
+];
 
 const state = {
     teams: [
@@ -57,6 +63,7 @@ const state = {
     future: [],
     editingSlot: null,
     activeGoalAudio: null,
+    activeGoalAudioSession: null,
     voiceRecognition: null,
     voiceRecognitionRestartTimer: null,
     voiceRecognitionEnabled: false,
@@ -78,6 +85,8 @@ const state = {
         nameScale: 100,
         crestScale: 100,
         timerScale: 100,
+        setScale: 100,
+        cornerButtonsScale: 100,
         nameY: 0,
         crestY: 0,
         centerY: 0,
@@ -176,6 +185,8 @@ const widgetInputs = {
     nameSize: document.getElementById("widget-name-size"),
     crestSize: document.getElementById("widget-crest-size"),
     timerSize: document.getElementById("widget-timer-size"),
+    setSize: document.getElementById("widget-set-size"),
+    cornerBtnSize: document.getElementById("widget-corner-btn-size"),
     nameY: document.getElementById("widget-name-y"),
     crestY: document.getElementById("widget-crest-y"),
     centerY: document.getElementById("widget-center-y"),
@@ -341,6 +352,8 @@ function resetAllState() {
         nameScale: 100,
         crestScale: 100,
         timerScale: 100,
+        setScale: 100,
+        cornerButtonsScale: 100,
         nameY: 0,
         crestY: 0,
         centerY: 0,
@@ -613,53 +626,121 @@ function pauseTimer() {
     renderTime();
 }
 
-function playGoalSong(slot) {
-    const team = getTeamAt(slot);
-    if (!team.goalsongTrack) {
-        return;
+function stopActiveGoalAudio() {
+    const session = state.activeGoalAudioSession;
+    if (session?.timeoutId) {
+        window.clearTimeout(session.timeoutId);
+    }
+    if (session?.fadeIntervalId) {
+        window.clearInterval(session.fadeIntervalId);
     }
     if (state.activeGoalAudio) {
         state.activeGoalAudio.pause();
-        state.activeGoalAudio = null;
+        state.activeGoalAudio.currentTime = 0;
     }
+    if (session?.resolve) {
+        session.resolve();
+    }
+    state.activeGoalAudio = null;
+    state.activeGoalAudioSession = null;
+}
+
+function playGoalSong(slot) {
+    const team = getTeamAt(slot);
+    if (!team.goalsongTrack) {
+        return Promise.resolve(false);
+    }
+    stopActiveGoalAudio();
     const track = team.goalsongTrack;
     if (!track) {
-        return;
+        return Promise.resolve(false);
     }
     const encodedSrc = `goalsongs/${encodeURIComponent(track)}`;
     const rawSrc = `goalsongs/${track}`;
     const audio = new Audio(encodedSrc);
-    audio.volume = team.goalsongVolume;
+    audio.volume = Math.max(0, Math.min(1, Number(team.goalsongVolume) || 0.8));
     audio.currentTime = 0;
-    audio.play().catch(() => {
-        // Some local servers/file modes work only with raw names.
-        audio.src = rawSrc;
-        audio.play().catch(() => {});
-    });
     state.activeGoalAudio = audio;
 
-    if (team.goalsongDuration < 0) {
-        return;
-    }
-
-    const keepSeconds = Math.max(1, team.goalsongDuration);
-    const fadeMs = 1200;
-    window.setTimeout(() => {
-        const startVolume = audio.volume;
-        const ticks = 12;
-        let current = 0;
-        const fadeInterval = window.setInterval(() => {
-            current += 1;
-            audio.volume = Math.max(0, startVolume * (1 - current / ticks));
-            if (current >= ticks) {
-                window.clearInterval(fadeInterval);
-                audio.pause();
-                if (state.activeGoalAudio === audio) {
-                    state.activeGoalAudio = null;
-                }
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = () => {
+            if (done) {
+                return;
             }
-        }, Math.floor(fadeMs / ticks));
-    }, keepSeconds * 1000);
+            done = true;
+            if (state.activeGoalAudioSession?.timeoutId) {
+                window.clearTimeout(state.activeGoalAudioSession.timeoutId);
+            }
+            if (state.activeGoalAudioSession?.fadeIntervalId) {
+                window.clearInterval(state.activeGoalAudioSession.fadeIntervalId);
+            }
+            if (state.activeGoalAudio === audio) {
+                state.activeGoalAudio = null;
+                state.activeGoalAudioSession = null;
+            }
+            resolve(true);
+        };
+
+        const onEnded = () => finish();
+        audio.addEventListener("ended", onEnded, { once: true });
+        audio.addEventListener("error", onEnded, { once: true });
+        state.activeGoalAudioSession = { resolve: finish, timeoutId: null, fadeIntervalId: null };
+
+        audio.play().catch(() => {
+            // Some local servers/file modes work only with raw names.
+            audio.src = rawSrc;
+            audio.play().catch(() => finish());
+        });
+
+        if (team.goalsongDuration < 0) {
+            return;
+        }
+
+        const keepSeconds = Math.max(1, Number(team.goalsongDuration) || 1);
+        const fadeMs = 1200;
+        state.activeGoalAudioSession.timeoutId = window.setTimeout(() => {
+            const startVolume = audio.volume;
+            const ticks = 12;
+            let current = 0;
+            state.activeGoalAudioSession.fadeIntervalId = window.setInterval(() => {
+                current += 1;
+                audio.volume = Math.max(0, startVolume * (1 - current / ticks));
+                if (current >= ticks) {
+                    audio.pause();
+                    finish();
+                }
+            }, Math.floor(fadeMs / ticks));
+        }, keepSeconds * 1000);
+    });
+}
+
+function pickVoiceFromPreset(voices, presetId) {
+    const isPolish = (voice) => /^pl\b/i.test(voice.lang) || /\bpolish\b|\bpolski\b/i.test(voice.name);
+    const preferFemale = (voice) => /\bfemale\b|\bkobiet|\bhelena\b|\bzofia\b/i.test(voice.name);
+    const preferMale = (voice) => /\bmale\b|\bmesk|\bjan\b|\bmarek\b/i.test(voice.name);
+    const polishVoices = voices.filter((voice) => isPolish(voice));
+    if (presetId === "__pl_female") {
+        return polishVoices.find((voice) => preferFemale(voice))
+            || polishVoices[0]
+            || null;
+    }
+    if (presetId === "__pl_male") {
+        return polishVoices.find((voice) => preferMale(voice))
+            || polishVoices[0]
+            || null;
+    }
+    if (presetId === "__auto_enhanced") {
+        return polishVoices.find((voice) => /\bgoogle\b|\bmicrosoft\b|\bpremium\b|\bneural\b/i.test(voice.name))
+            || polishVoices[0]
+            || null;
+    }
+    if (presetId === "__auto_pl") {
+        return polishVoices.find((voice) => /\bgoogle\b|\bmicrosoft\b/i.test(voice.name))
+            || polishVoices[0]
+            || null;
+    }
+    return null;
 }
 
 function speakScore() {
@@ -674,9 +755,20 @@ function speakScore() {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = state.settings.audioRate;
     utterance.volume = state.settings.audioVolume;
-    const selectedVoice = speechSynthesis.getVoices().find((voice) => voice.name === state.settings.audioVoice);
+    utterance.lang = "pl-PL";
+    const voices = speechSynthesis.getVoices();
+    const isPolish = (voice) => /^pl\b/i.test(voice.lang) || /\bpolish\b|\bpolski\b/i.test(voice.name);
+    let selectedVoice = voices.find((voice) => (voice.voiceURI || "") === state.settings.audioVoice)
+        || voices.find((voice) => voice.name === state.settings.audioVoice);
+    if (!selectedVoice && String(state.settings.audioVoice || "").startsWith("__")) {
+        selectedVoice = pickVoiceFromPreset(voices, state.settings.audioVoice);
+    }
+    if ((!selectedVoice || !isPolish(selectedVoice)) && !String(state.settings.audioVoice || "").startsWith("__")) {
+        selectedVoice = pickVoiceFromPreset(voices, "__auto_pl");
+    }
     if (selectedVoice) {
         utterance.voice = selectedVoice;
+        utterance.lang = selectedVoice.lang || "pl-PL";
     }
     speechSynthesis.cancel();
     speechSynthesis.speak(utterance);
@@ -983,14 +1075,17 @@ function renderWidgets() {
     const compactWidthScale = Math.max(0.62, Math.min(1, viewportWidth / 1100));
     const compactScale = isMobileLandscape ? Math.min(compactHeightScale, compactWidthScale) : 1;
     const timerScale = Math.max(70, Math.min(160, state.widgets.timerScale)) / 100;
+    const setScale = Math.max(70, Math.min(200, state.widgets.setScale || 100)) / 100;
+    const cornerButtonsScale = Math.max(70, Math.min(200, state.widgets.cornerButtonsScale || 100)) / 100;
     const phoneTimerMultiplier = isPhone ? 0.72 : 1;
     const effectiveTimerScale = timerScale * compactScale * phoneTimerMultiplier;
+    const effectiveSetScale = setScale * compactScale * phoneTimerMultiplier;
     const timerWidth = Math.max(260, Math.min(Math.round(680 * effectiveTimerScale), Math.round(viewportWidth * (isMobileLandscape ? 0.86 : 0.94))));
     const timerHeight = Math.max(52, Math.min(Math.round(118 * effectiveTimerScale), Math.round(viewportHeight * (isMobileLandscape ? 0.18 : 0.24))));
     const timerFontSize = Math.max(26, Math.min(Math.round(84 * effectiveTimerScale), Math.round(viewportHeight * (isMobileLandscape ? 0.115 : 0.14))));
     const timerBtnSize = Math.max(20, Math.min(Math.round(timerHeight * 0.62), Math.round(viewportHeight * (isMobileLandscape ? 0.085 : 0.1))));
-    const setWidth = Math.max(160, Math.min(Math.round(312 * effectiveTimerScale), Math.round(viewportWidth * (isMobileLandscape ? 0.46 : 0.64))));
-    const setHeight = Math.max(48, Math.min(Math.round(136 * effectiveTimerScale), Math.round(viewportHeight * (isMobileLandscape ? 0.14 : 0.2))));
+    const setWidth = Math.max(160, Math.min(Math.round(312 * effectiveSetScale), Math.round(viewportWidth * (isMobileLandscape ? 0.46 : 0.64))));
+    const setHeight = Math.max(48, Math.min(Math.round(136 * effectiveSetScale), Math.round(viewportHeight * (isMobileLandscape ? 0.14 : 0.2))));
     el.timerDisplay.style.transform = "none";
     el.timerDisplay.style.fontSize = `${timerFontSize}px`;
     el.timerToggle.style.fontSize = `${timerBtnSize}px`;
@@ -1016,7 +1111,57 @@ function renderWidgets() {
     el.controlMenu.querySelectorAll(".menu-btn").forEach((btn) => {
         btn.style.fontSize = `${Math.max(26, Math.round(52 * compactScale))}px`;
     });
-    const safeCenterY = isMobileLandscape
+    const cornerButtonSize = Math.max(38, Math.round(46 * cornerButtonsScale * compactScale));
+    const editFont = Math.max(18, Math.round(30 * cornerButtonsScale * compactScale));
+    const quickFont = Math.max(16, Math.round(24 * cornerButtonsScale * compactScale));
+    const stopFont = Math.max(15, Math.round(22 * cornerButtonsScale * compactScale));
+    const cornerEdgeOffset = viewportWidth <= 900 ? 8 : 26;
+    const cornerGap = Math.max(6, Math.round(10 * cornerButtonsScale * compactScale));
+    const quickOffset = cornerEdgeOffset + cornerButtonSize + cornerGap;
+    const stopOffset = cornerEdgeOffset + (cornerButtonSize + cornerGap) * 2;
+    document.querySelectorAll(".edit-btn").forEach((button) => {
+        button.style.minWidth = `${cornerButtonSize}px`;
+        button.style.minHeight = `${cornerButtonSize}px`;
+        button.style.fontSize = `${editFont}px`;
+        button.style.padding = `${Math.max(2, Math.round(2 * cornerButtonsScale))}px ${Math.max(8, Math.round(8 * cornerButtonsScale))}px`;
+    });
+    document.querySelectorAll(".quick-btn").forEach((button) => {
+        button.style.minWidth = `${cornerButtonSize}px`;
+        button.style.minHeight = `${cornerButtonSize}px`;
+        button.style.fontSize = `${quickFont}px`;
+        button.style.padding = `${Math.max(2, Math.round(2 * cornerButtonsScale))}px ${Math.max(8, Math.round(8 * cornerButtonsScale))}px`;
+    });
+    document.querySelectorAll(".stop-btn").forEach((button) => {
+        button.style.minWidth = `${cornerButtonSize}px`;
+        button.style.minHeight = `${cornerButtonSize}px`;
+        button.style.fontSize = `${stopFont}px`;
+        button.style.padding = `${Math.max(3, Math.round(3 * cornerButtonsScale))}px ${Math.max(8, Math.round(8 * cornerButtonsScale))}px`;
+    });
+    [el.sideLeft, el.sideRight].forEach((side) => {
+        const isLeft = side === el.sideLeft;
+        const editBtn = side.querySelector(".edit-btn");
+        const quickBtn = side.querySelector(".quick-btn");
+        const stopBtn = side.querySelector(".stop-btn");
+        if (!editBtn || !quickBtn || !stopBtn) {
+            return;
+        }
+        if (isLeft) {
+            editBtn.style.left = `${cornerEdgeOffset}px`;
+            editBtn.style.right = "";
+            quickBtn.style.left = `${quickOffset}px`;
+            quickBtn.style.right = "";
+            stopBtn.style.left = `${stopOffset}px`;
+            stopBtn.style.right = "";
+        } else {
+            editBtn.style.right = `${cornerEdgeOffset}px`;
+            editBtn.style.left = "";
+            quickBtn.style.right = `${quickOffset}px`;
+            quickBtn.style.left = "";
+            stopBtn.style.right = `${stopOffset}px`;
+            stopBtn.style.left = "";
+        }
+    });
+    let safeCenterY = isMobileLandscape
         ? Math.max(-36, Math.min(42, state.widgets.centerY))
         : state.widgets.centerY;
     if (state.widgets.orientationVertical) {
@@ -1024,15 +1169,41 @@ function renderWidgets() {
     } else {
         el.centerStack.style.transform = `translateX(-50%) translateY(${safeCenterY}px)`;
     }
-    const safeMenuY = isMobileLandscape
+    let safeMenuY = isMobileLandscape
         ? Math.max(-18, Math.min(Math.round(viewportHeight * 0.12), state.widgets.menuY))
         : state.widgets.menuY;
     const landscapeMenuLift = isMobileLandscape ? -Math.max(16, Math.round(viewportHeight * 0.06)) : 0;
-    const phoneMenuY = isPhone ? (safeMenuY + landscapeMenuLift) * 0.5 : safeMenuY + landscapeMenuLift;
+    let phoneMenuY = isPhone ? (safeMenuY + landscapeMenuLift) * 0.5 : safeMenuY + landscapeMenuLift;
     el.menuWrap.style.transform = `translateY(${phoneMenuY}px)`;
     const menuScale = Math.max(70, Math.min(160, state.widgets.menuScale || 100)) / 100;
     const effectiveMenuScale = isPhone ? menuScale * 0.5 : menuScale;
     el.controlMenu.style.setProperty("--menu-scale", String(effectiveMenuScale));
+    const centerRect = el.centerStack.getBoundingClientRect();
+    const menuRect = el.menuWrap.getBoundingClientRect();
+    const margin = 8;
+    if (centerRect.top < margin) {
+        safeCenterY += margin - centerRect.top;
+    } else if (centerRect.bottom > viewportHeight - margin) {
+        safeCenterY -= centerRect.bottom - (viewportHeight - margin);
+    }
+    if (menuRect.bottom > viewportHeight - margin) {
+        safeMenuY -= menuRect.bottom - (viewportHeight - margin);
+        phoneMenuY = isPhone ? (safeMenuY + landscapeMenuLift) * 0.5 : safeMenuY + landscapeMenuLift;
+    }
+    if (Math.round(safeCenterY) !== Math.round(state.widgets.centerY)) {
+        state.widgets.centerY = Math.round(safeCenterY);
+        widgetInputs.centerY.value = String(state.widgets.centerY);
+        if (state.widgets.orientationVertical) {
+            el.centerStack.style.transform = `translate(-50%, -50%) translateY(${state.widgets.centerY}px)`;
+        } else {
+            el.centerStack.style.transform = `translateX(-50%) translateY(${state.widgets.centerY}px)`;
+        }
+    }
+    if (Math.round(safeMenuY) !== Math.round(state.widgets.menuY)) {
+        state.widgets.menuY = Math.round(safeMenuY);
+        widgetInputs.menuY.value = String(state.widgets.menuY);
+        el.menuWrap.style.transform = `translateY(${phoneMenuY}px)`;
+    }
     updateWidgetPreview();
     saveState();
 }
@@ -1125,8 +1296,15 @@ function changeScore(slot, delta, options = {}) {
     }
     renderScores();
     updateWidgetPreview();
-    speakScore();
     const shouldPlayGoalSong = options.playGoalSong !== false;
+    const hasGoalSong = Boolean(team.goalsongTrack);
+    if (delta > 0 && shouldPlayGoalSong && hasGoalSong) {
+        playGoalSong(slot).then(() => {
+            speakScore();
+        });
+        return;
+    }
+    speakScore();
     if (delta > 0 && shouldPlayGoalSong) {
         playGoalSong(slot);
     }
@@ -1480,13 +1658,37 @@ function setupVoices() {
     const fillVoices = () => {
         const selected = settingInputs.audioVoice.value;
         settingInputs.audioVoice.innerHTML = "<option value=''>Domyslny</option>";
-        speechSynthesis.getVoices().forEach((voice) => {
+        AUDIO_VOICE_PRESETS.forEach((preset) => {
             const option = document.createElement("option");
-            option.value = voice.name;
+            option.value = preset.id;
+            option.textContent = preset.label;
+            settingInputs.audioVoice.append(option);
+        });
+        const seen = new Set();
+        const voices = [...speechSynthesis.getVoices()].filter((voice) => {
+            const key = `${(voice.voiceURI || "").toLowerCase()}|${(voice.name || "").toLowerCase()}|${(voice.lang || "").toLowerCase()}`;
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
+        voices.sort((a, b) => {
+            const aPl = /^pl\b/i.test(a.lang) ? 0 : 1;
+            const bPl = /^pl\b/i.test(b.lang) ? 0 : 1;
+            if (aPl !== bPl) {
+                return aPl - bPl;
+            }
+            return a.name.localeCompare(b.name, "pl");
+        });
+        voices.forEach((voice) => {
+            const option = document.createElement("option");
+            option.value = voice.voiceURI || voice.name;
             option.textContent = `${voice.name} (${voice.lang})`;
             settingInputs.audioVoice.append(option);
         });
-        settingInputs.audioVoice.value = selected;
+        const hasSelected = [...settingInputs.audioVoice.options].some((opt) => opt.value === selected);
+        settingInputs.audioVoice.value = hasSelected ? selected : "__auto_pl";
     };
     fillVoices();
     speechSynthesis.addEventListener("voiceschanged", fillVoices);
@@ -1626,11 +1828,7 @@ function bindMainActions() {
 
     document.querySelectorAll(".stop-btn").forEach((stopButton) => {
         stopButton.addEventListener("click", () => {
-            if (state.activeGoalAudio) {
-                state.activeGoalAudio.pause();
-                state.activeGoalAudio.currentTime = 0;
-                state.activeGoalAudio = null;
-            }
+            stopActiveGoalAudio();
         });
     });
 
@@ -1657,6 +1855,20 @@ function bindMainActions() {
         if (!event.target.closest("#settings-transfer-btn") && !event.target.closest("#settings-transfer-panel")) {
             el.settingsTransferPanel.classList.add("is-hidden");
         }
+    });
+}
+
+function bindCornerButtonGuards() {
+    const guardedSelectors = [".edit-btn", ".quick-btn", ".stop-btn"];
+    const stop = (event) => {
+        event.stopPropagation();
+    };
+    guardedSelectors.forEach((selector) => {
+        document.querySelectorAll(selector).forEach((button) => {
+            button.addEventListener("pointerdown", stop, { passive: true });
+            button.addEventListener("click", stop);
+            button.addEventListener("touchstart", stop, { passive: true });
+        });
     });
 }
 
@@ -1705,6 +1917,14 @@ function bindWidgetInputs() {
         state.widgets.timerScale = Number(widgetInputs.timerSize.value);
         renderWidgets();
     });
+    widgetInputs.setSize.addEventListener("input", () => {
+        state.widgets.setScale = Number(widgetInputs.setSize.value);
+        renderWidgets();
+    });
+    widgetInputs.cornerBtnSize.addEventListener("input", () => {
+        state.widgets.cornerButtonsScale = Number(widgetInputs.cornerBtnSize.value);
+        renderWidgets();
+    });
     widgetInputs.nameY.addEventListener("input", () => {
         state.widgets.nameY = Number(widgetInputs.nameY.value);
         renderScores();
@@ -1733,6 +1953,8 @@ function bindWidgetInputs() {
         state.widgets.nameScale = 100;
         state.widgets.crestScale = 100;
         state.widgets.timerScale = 100;
+        state.widgets.setScale = 100;
+        state.widgets.cornerButtonsScale = 100;
         state.widgets.nameY = 0;
         state.widgets.crestY = 0;
         state.widgets.centerY = 0;
@@ -1742,6 +1964,8 @@ function bindWidgetInputs() {
         widgetInputs.nameSize.value = "100";
         widgetInputs.crestSize.value = "100";
         widgetInputs.timerSize.value = "100";
+        widgetInputs.setSize.value = "100";
+        widgetInputs.cornerBtnSize.value = "100";
         widgetInputs.nameY.value = "0";
         widgetInputs.crestY.value = "0";
         widgetInputs.centerY.value = "0";
@@ -2164,6 +2388,8 @@ function initializeDefaults() {
         nameScale: 100,
         crestScale: 100,
         timerScale: 100,
+        setScale: 100,
+        cornerButtonsScale: 100,
         nameY: 0,
         crestY: 0,
         centerY: 0,
@@ -2180,6 +2406,8 @@ function initializeDefaults() {
     widgetInputs.nameSize.value = String(state.widgets.nameScale);
     widgetInputs.crestSize.value = String(state.widgets.crestScale);
     widgetInputs.timerSize.value = String(state.widgets.timerScale);
+    widgetInputs.setSize.value = String(state.widgets.setScale);
+    widgetInputs.cornerBtnSize.value = String(state.widgets.cornerButtonsScale);
     widgetInputs.nameY.value = String(state.widgets.nameY);
     widgetInputs.crestY.value = String(state.widgets.crestY);
     widgetInputs.centerY.value = String(state.widgets.centerY);
@@ -2225,6 +2453,7 @@ function init() {
     bindSetGestures(el.setsLeft, "left");
     bindSetGestures(el.setsRight, "right");
     bindMainActions();
+    bindCornerButtonGuards();
     bindWidgetInputs();
     bindWidgetPreviewDrag();
     bindSettingsInputs();
