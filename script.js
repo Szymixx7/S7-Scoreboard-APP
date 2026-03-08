@@ -33,7 +33,7 @@ const FALLBACK_GOALSONGS = [
     "Liverpool F.C. 2023 Goal Song.wav",
     "Manchester City Goal song.wav",
     "Manchester United Goal Song 202425.wav",
-    "Now or Never Goal Song.wav",
+    "Now or Never Goal Song.WAV",
     "Osasuna Goal Song.wav",
     "Poland National Team Anthem  Stadium Effect.wav",
     "Rayo Vallecano 2022 Goal Song.wav",
@@ -2694,3 +2694,4 @@ function wrapGsInline(selectId, buttonId) {
 wrapGsInline("team-goalsong-track", "team-goalsong-preview");
 wrapGsInline("default-goalsong-track-1", "default-goalsong-preview-1");
 wrapGsInline("default-goalsong-track-2", "default-goalsong-preview-2");
+
