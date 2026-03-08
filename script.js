@@ -2349,6 +2349,7 @@ function bindSettingsInputs() {
         el.teamTransferPanel.classList.toggle("is-hidden");
     });
     el.teamImportBtn.addEventListener("click", () => {
+        el.teamImportFile.value = "";
         el.teamImportFile.click();
     });
     el.teamImportFile.addEventListener("change", async () => {
@@ -2371,7 +2372,9 @@ function bindSettingsInputs() {
             openTeamEditor(state.editingSlot);
             renderAll();
             saveState();
-        } catch (_) {}
+        } catch (_) {} finally {
+            el.teamImportFile.value = "";
+        }
     });
     el.resetAllBtn.addEventListener("click", () => {
         if (window.confirm("Na pewno zresetowac wszystkie ustawienia?")) {
@@ -2399,6 +2402,7 @@ function bindSettingsInputs() {
         });
     });
     el.importAllBtn.addEventListener("click", () => {
+        el.importAllFile.value = "";
         el.importAllFile.click();
     });
     el.importAllFile.addEventListener("change", async () => {
@@ -2424,10 +2428,66 @@ function bindSettingsInputs() {
             if (typeof parsed?.timerSeconds === "number") {
                 state.timerSeconds = Math.max(0, parsed.timerSeconds);
             }
-            initializeDefaults();
+            // Keep imported payload; do not reload stale localStorage here.
+            state.settings.clickScoreEnabled = state.settings.clickScoreEnabled !== false;
+            state.settings.countdownFormat = state.settings.countdownFormat === "ms" ? "ms" : "hms";
+            state.settings.voiceGoalCommandsEnabled = Boolean(state.settings.voiceGoalCommandsEnabled);
+            state.settings.swipeArea = state.settings.swipeArea === "side" ? "side" : "score";
+            state.widgets = {
+                orientationVertical: false,
+                darkMode: false,
+                showTimer: true,
+                showSets: true,
+                showNames: true,
+                scoreScale: 100,
+                nameScale: 100,
+                crestScale: 100,
+                timerScale: 100,
+                setScale: 100,
+                cornerButtonsScale: 100,
+                nameY: 0,
+                crestY: 0,
+                centerY: 0,
+                menuY: 38,
+                menuScale: 100,
+                ...state.widgets
+            };
+            settingInputs.countdownLength.value = formatDurationInput(state.settings.countdownLengthSeconds);
+            settingInputs.countdownFormat.value = state.settings.countdownFormat;
+            settingInputs.clickScoreEnabled.checked = state.settings.clickScoreEnabled;
+            settingInputs.swipeDownMinus.checked = state.settings.swipeDownMinus;
+            settingInputs.swipe.checked = state.settings.swipeScore;
+            settingInputs.swipeArea.value = state.settings.swipeArea;
+            settingInputs.askSetAward.checked = state.settings.askSetAward;
+            settingInputs.voiceGoalEnabled.checked = state.settings.voiceGoalCommandsEnabled;
+            settingInputs.setsEnabled.checked = state.settings.setsEnabled;
+            settingInputs.pointsToSet.value = String(state.settings.pointsToSet);
+            settingInputs.setAdvantage.value = String(state.settings.setAdvantage);
+            settingInputs.setsToMatch.value = String(state.settings.setsToMatch);
+            settingInputs.setAnimationsEnabled.checked = state.settings.setAnimationsEnabled;
+            settingInputs.audioEnabled.checked = state.settings.audioEnabled;
+            settingInputs.audioVoice.value = state.settings.audioVoice;
+            settingInputs.audioRate.value = String(state.settings.audioRate);
+            settingInputs.audioVolume.value = String(state.settings.audioVolume);
+            settingInputs.audioFormat.value = state.settings.audioFormat;
+            settingInputs.countdownEnabled.checked = state.settings.countdownEnabled;
+            widgetInputs.scoreSize.value = String(state.widgets.scoreScale);
+            widgetInputs.nameSize.value = String(state.widgets.nameScale);
+            widgetInputs.crestSize.value = String(state.widgets.crestScale);
+            widgetInputs.timerSize.value = String(state.widgets.timerScale);
+            widgetInputs.setSize.value = String(state.widgets.setScale);
+            widgetInputs.cornerBtnSize.value = String(state.widgets.cornerButtonsScale);
+            widgetInputs.nameY.value = String(state.widgets.nameY);
+            widgetInputs.crestY.value = String(state.widgets.crestY);
+            widgetInputs.centerY.value = String(state.widgets.centerY);
+            widgetInputs.menuY.value = String(state.widgets.menuY);
+            widgetInputs.menuSize.value = String(state.widgets.menuScale);
+            syncSettingsTeamInputs();
             renderAll();
             saveState();
-        } catch (_) {}
+        } catch (_) {} finally {
+            el.importAllFile.value = "";
+        }
     });
     el.settingsModal.addEventListener("change", saveState);
     el.settingsModal.addEventListener("input", saveState);
@@ -2458,6 +2518,8 @@ function initializeDefaults() {
         menuScale: 100,
         ...state.widgets
     };
+    // Always reset bottom menu position to default on page refresh.
+    state.widgets.menuY = 38;
     fillThemeSelect(el.teamThemeSelect);
     fillThemeSelect(settingInputs.theme1);
     fillThemeSelect(settingInputs.theme2);
