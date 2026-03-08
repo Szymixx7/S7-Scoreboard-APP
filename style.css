@@ -66,6 +66,7 @@ select {
 .quick-btn {
     position: absolute;
     top: 20px;
+    z-index: 30;
     border: 1px solid rgb(255 255 255 / 52%);
     background: rgb(0 0 0 / 32%);
     color: inherit;
@@ -95,6 +96,7 @@ select {
 .stop-btn {
     position: absolute;
     top: 20px;
+    z-index: 30;
     border: 1px solid rgb(255 255 255 / 52%);
     border-radius: 12px;
     background: rgb(0 0 0 / 32%);
@@ -193,6 +195,7 @@ select {
     position: absolute;
     left: 50%;
     top: 50%;
+    z-index: 1;
     margin: 0;
     line-height: 0.88;
     font-weight: 700;
